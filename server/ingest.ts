@@ -1,10 +1,26 @@
+import dotenv from 'dotenv'
+
+// Load .env.local file
+dotenv.config({ path: '.env.local' })
+
+console.log('[Ingest] Loaded env vars:', {
+  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...',
+  hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  mqttUrl: process.env.MQTT_BROKER_URL
+})
+
 import { getMqttClient, subscribeToTopics } from './mqtt-client'
 import { createClient } from '@supabase/supabase-js'
 import { MqttClient } from 'mqtt'
 
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('[Ingest] Missing required environment variables!')
+  process.exit(1)
+}
+
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
 interface VehicleStatusPayload {
