@@ -3,15 +3,11 @@ services:
     image: eclipse-mosquitto:2
     container_name: mtc-mqtt-broker
     volumes:
-      - ./docker/mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - ./docker/mosquitto/config/passwd:/mosquitto/config/passwd:ro
-      - ./docker/mosquitto/config/acl:/mosquitto/config/acl:ro
-      - ./docker/mosquitto/certs:/mosquitto/config/certs:ro
+      - ./docker/mosquitto/config/mosquitto-dev.conf:/mosquitto/config/mosquitto.conf:ro
       - mosq-data:/mosquitto/data
       - mosq-log:/mosquitto/log
     ports:
-      - "8883:8883"  # TLS MQTT
-      - "9001:9001"  # WebSocket (optional)
+      - "1883:1883"  # Plain MQTT (development)
     restart: unless-stopped
     networks:
       - mtc-network
@@ -22,7 +18,7 @@ services:
       retries: 3
 
   mg-ismart-gateway:
-    image: ghcr.io/saic-ismart-api/saic-python-mqtt-gateway:latest
+    image: saicismartapi/saic-python-mqtt-gateway:latest
     container_name: mtc-ismart-gateway
     env_file:
       - .env.mg
