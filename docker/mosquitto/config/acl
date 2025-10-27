@@ -1,0 +1,25 @@
+# ACL Configuration for MTC iSmart MQTT
+# Format: user <username>
+#         topic [read|write|readwrite] <topic>
+
+# Gateway user - full access to iSmart topics
+user mg_gateway
+topic readwrite saic/#
+topic readwrite mg/#
+
+# App user - read status, write commands
+user mtc_app
+topic read saic/+/vehicles/+/status/#
+topic read saic/+/vehicles/+/events/#
+topic read mg/+/status/#
+topic read mg/+/events/#
+topic write saic/+/vehicles/+/cmd/#
+topic write mg/+/cmd/#
+
+# Ingestion service - read all status and events
+user mtc_ingest
+topic read saic/#
+topic read mg/#
+
+# System topics (all users can read)
+topic read $SYS/#
