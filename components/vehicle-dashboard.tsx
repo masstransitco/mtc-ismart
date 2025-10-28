@@ -140,15 +140,23 @@ export default function VehicleDashboard() {
     }
   }
 
-  const getChargingStatusColor = (state: string | null) => {
-    switch (state) {
-      case "Charging":
-        return "bg-green-500"
-      case "Complete":
-        return "bg-blue-500"
-      default:
-        return "bg-gray-500"
+  const getVehicleStatus = (vehicle: VehicleStatus) => {
+    // Priority 1: Charging states
+    if (vehicle.charging_state === "Charging") {
+      return { label: "Charging", color: "bg-green-500 text-white" }
     }
+    if (vehicle.charging_state === "Complete") {
+      return { label: "Charged", color: "bg-blue-500 text-white" }
+    }
+
+    // Priority 2: Movement state based on speed
+    const speed = vehicle.speed || 0
+    if (speed > 5) {
+      return { label: "Driving", color: "bg-orange-500 text-white" }
+    }
+
+    // Priority 3: Parked (low/no speed, not charging)
+    return { label: "Parked", color: "bg-gray-500 text-white" }
   }
 
   const formatTimestamp = (ts: string | null) => {
@@ -253,12 +261,17 @@ export default function VehicleDashboard() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-1">
-                      <Badge
-                        variant="outline"
-                        className={getChargingStatusColor(vehicle.charging_state)}
-                      >
-                        {vehicle.charging_state || "Unknown"}
-                      </Badge>
+                      {(() => {
+                        const status = getVehicleStatus(vehicle)
+                        return (
+                          <Badge
+                            variant="outline"
+                            className={status.color}
+                          >
+                            {status.label}
+                          </Badge>
+                        )
+                      })()}
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="w-3 h-3" />
                         <span>{formatTimestamp(vehicle.updated_at)}</span>
