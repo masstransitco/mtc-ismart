@@ -23,14 +23,17 @@ RUN pip3 install saic-ismart-client-ng --break-system-packages
 # Create app directory
 WORKDIR /app
 
+# Copy package files first for better layer caching
+COPY package.json package-lock.json /app/
+
+# Install Node dependencies (use ci for lockfile)
+RUN npm ci --omit=dev || npm install --omit=dev
+
 # Copy application files
 COPY server/ /app/server/
-COPY package.json package-lock.json tsconfig.json /app/
+COPY tsconfig.json /app/
 COPY lib/ /app/lib/
 COPY hooks/ /app/hooks/
-
-# Install Node dependencies
-RUN npm install --production
 
 # Copy MQTT config
 COPY docker/mosquitto/config/mosquitto-cloud.conf /etc/mosquitto/mosquitto.conf
