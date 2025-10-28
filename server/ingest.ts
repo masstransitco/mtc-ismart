@@ -38,14 +38,26 @@ interface VehicleStatusPayload {
   bearing?: number
   speed?: number
   doors_locked?: boolean
+  door_driver_open?: boolean
+  door_passenger_open?: boolean
+  door_rear_left_open?: boolean
+  door_rear_right_open?: boolean
   windows_state?: object
   boot_locked?: boolean
+  bonnet_closed?: boolean
   interior_temp_c?: number
   exterior_temp_c?: number
   hvac_state?: string
   ignition?: boolean
   engine_running?: boolean
   odometer_km?: number
+  lights_main_beam?: boolean
+  lights_dipped_beam?: boolean
+  lights_side?: boolean
+  remote_temperature?: number
+  heated_seat_front_left_level?: number
+  heated_seat_front_right_level?: number
+  rear_window_defrost?: boolean
 }
 
 function safeParse(message: string): any {
@@ -102,6 +114,12 @@ async function handleMessage(topic: string, message: Buffer) {
         )
     }
 
+    // Helper function for case-insensitive boolean parsing
+    const parseBoolean = (value: any): boolean => {
+      if (typeof value === 'boolean') return value
+      return value.toString().toLowerCase() === 'true'
+    }
+
     // Map SAIC topics to our database fields
     if (topic.includes('/drivetrain/soc')) {
       cache.soc = parseFloat(actualValue)
@@ -109,7 +127,7 @@ async function handleMessage(topic: string, message: Buffer) {
     } else if (topic.includes('/drivetrain/range')) {
       cache.range_km = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/charging')) {
-      cache.charging_state = actualValue === 'true' || actualValue === true ? 'Charging' : 'Idle'
+      cache.charging_state = parseBoolean(actualValue) ? 'Charging' : 'Idle'
     } else if (topic.includes('/drivetrain/current')) {
       cache.charge_current_a = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/voltage')) {
@@ -119,8 +137,8 @@ async function handleMessage(topic: string, message: Buffer) {
     } else if (topic.includes('/drivetrain/mileage')) {
       cache.odometer_km = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/running')) {
-      cache.ignition = actualValue === 'true' || actualValue === true
-      cache.engine_running = actualValue === 'true' || actualValue === true
+      cache.ignition = parseBoolean(actualValue)
+      cache.engine_running = parseBoolean(actualValue)
     } else if (topic.includes('/location/latitude')) {
       cache.lat = parseFloat(actualValue)
     } else if (topic.includes('/location/longitude')) {
@@ -132,15 +150,40 @@ async function handleMessage(topic: string, message: Buffer) {
     } else if (topic.includes('/location/speed')) {
       cache.speed = parseFloat(actualValue)
     } else if (topic.includes('/doors/locked')) {
-      cache.doors_locked = actualValue === 'true' || actualValue === true
+      cache.doors_locked = parseBoolean(actualValue)
+    } else if (topic.includes('/doors/driver')) {
+      cache.door_driver_open = parseBoolean(actualValue)
+    } else if (topic.includes('/doors/passenger')) {
+      cache.door_passenger_open = parseBoolean(actualValue)
+    } else if (topic.includes('/doors/rearLeft')) {
+      cache.door_rear_left_open = parseBoolean(actualValue)
+    } else if (topic.includes('/doors/rearRight')) {
+      cache.door_rear_right_open = parseBoolean(actualValue)
+    } else if (topic.includes('/doors/bonnet')) {
+      cache.bonnet_closed = !parseBoolean(actualValue) // Inverted: topic is "open", field is "closed"
     } else if (topic.includes('/doors/boot')) {
-      cache.boot_locked = actualValue === 'true' || actualValue === true
+      cache.boot_locked = parseBoolean(actualValue)
     } else if (topic.includes('/climate/interiorTemperature')) {
       cache.interior_temp_c = parseFloat(actualValue)
     } else if (topic.includes('/climate/exteriorTemperature')) {
       cache.exterior_temp_c = parseFloat(actualValue)
     } else if (topic.includes('/climate/remoteClimateState')) {
       cache.hvac_state = actualValue
+    } else if (topic.includes('/climate/remoteTemperature')) {
+      cache.remote_temperature = parseInt(actualValue)
+    } else if (topic.includes('/climate/heatedSeatsFrontLeftLevel')) {
+      cache.heated_seat_front_left_level = parseInt(actualValue)
+    } else if (topic.includes('/climate/heatedSeatsFrontRightLevel')) {
+      cache.heated_seat_front_right_level = parseInt(actualValue)
+    } else if (topic.includes('/climate/rearWindowDefrosterHeating')) {
+      const value = actualValue.toString().toLowerCase()
+      cache.rear_window_defrost = value === 'on' || value === 'true'
+    } else if (topic.includes('/lights/mainBeam')) {
+      cache.lights_main_beam = parseBoolean(actualValue)
+    } else if (topic.includes('/lights/dippedBeam')) {
+      cache.lights_dipped_beam = parseBoolean(actualValue)
+    } else if (topic.includes('/lights/side')) {
+      cache.lights_side = parseBoolean(actualValue)
     }
 
     cache.lastUpdate = Date.now()
@@ -235,6 +278,7 @@ export function startIngestion() {
       'saic/+/vehicles/+/location/#',     // GPS, heading, speed
       'saic/+/vehicles/+/climate/#',      // Temperature, HVAC
       'saic/+/vehicles/+/doors/#',        // Lock status, windows
+      'saic/+/vehicles/+/lights/#',       // Headlights, side lights
       'saic/+/vehicles/+/refresh/#',      // Refresh state
     ]
 

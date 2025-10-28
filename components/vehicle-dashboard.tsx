@@ -22,6 +22,16 @@ import {
   Gauge,
   Clock,
   Navigation,
+  DoorOpen,
+  DoorClosed,
+  AlertTriangle,
+  MapPinned,
+  Bell,
+  Lightbulb,
+  Plus,
+  Minus,
+  Fan,
+  Snowflake,
 } from "lucide-react"
 import { VehicleStatus } from "@/hooks/use-vehicle"
 import { reverseGeocode } from "@/lib/geocoding"
@@ -31,6 +41,8 @@ export default function VehicleDashboard() {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleStatus | null>(null)
   const [locations, setLocations] = useState<Record<string, string>>({})
+  const [targetTemps, setTargetTemps] = useState<Record<string, number>>({})
+  const [showClimateControls, setShowClimateControls] = useState<Record<string, boolean>>({})
   const { toast } = useToast()
 
   // Geocode vehicle locations when they update
@@ -86,12 +98,12 @@ export default function VehicleDashboard() {
     }
   }
 
-  const handleClimateCommand = async (vin: string, action: string) => {
+  const handleClimateCommand = async (vin: string, action: string, temperature?: number) => {
     try {
       const response = await fetch("/api/vehicle/climate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vin, action }),
+        body: JSON.stringify({ vin, action, temperature }),
       })
 
       const data = await response.json()
@@ -99,7 +111,9 @@ export default function VehicleDashboard() {
       if (data.success) {
         toast({
           title: "Climate Control",
-          description: `Climate ${action} command sent`,
+          description: temperature
+            ? `Climate ${action} at ${temperature}°C command sent`
+            : `Climate ${action} command sent`,
         })
       } else {
         throw new Error(data.error || "Command failed")
@@ -127,6 +141,47 @@ export default function VehicleDashboard() {
         toast({
           title: "Charge Control",
           description: `Charge ${action} command sent`,
+        })
+      } else {
+        throw new Error(data.error || "Command failed")
+      }
+    } catch (error) {
+      toast({
+        title: "Command Failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const getTargetTemp = (vin: string) => {
+    return targetTemps[vin] || 22 // Default to 22°C
+  }
+
+  const adjustTemp = (vin: string, delta: number) => {
+    const currentTemp = getTargetTemp(vin)
+    const newTemp = Math.max(17, Math.min(33, currentTemp + delta)) // Clamp between 17-33°C
+    setTargetTemps((prev) => ({ ...prev, [vin]: newTemp }))
+  }
+
+  const toggleClimateControls = (vin: string) => {
+    setShowClimateControls((prev) => ({ ...prev, [vin]: !prev[vin] }))
+  }
+
+  const handleFindMyCarCommand = async (vin: string, mode: string) => {
+    try {
+      const response = await fetch("/api/vehicle/find", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vin, mode }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Find My Car",
+          description: data.message,
         })
       } else {
         throw new Error(data.error || "Command failed")
@@ -170,6 +225,20 @@ export default function VehicleDashboard() {
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
     return `${Math.floor(diffMins / 1440)}d ago`
+  }
+
+  const getDoorStatus = (vehicle: VehicleStatus) => {
+    const openDoors = []
+    if (vehicle.door_driver_open) openDoors.push("Driver")
+    if (vehicle.door_passenger_open) openDoors.push("Passenger")
+    if (vehicle.door_rear_left_open) openDoors.push("Rear-L")
+    if (vehicle.door_rear_right_open) openDoors.push("Rear-R")
+
+    return {
+      hasOpenDoors: openDoors.length > 0,
+      openDoors,
+      allClosed: openDoors.length === 0,
+    }
   }
 
   if (loading) {
@@ -276,6 +345,26 @@ export default function VehicleDashboard() {
                         <Clock className="w-3 h-3" />
                         <span>{formatTimestamp(vehicle.updated_at)}</span>
                       </div>
+                      {/* Light Status Indicators */}
+                      {(vehicle.lights_main_beam || vehicle.lights_dipped_beam || vehicle.lights_side) && (
+                        <div className="flex items-center gap-1">
+                          {vehicle.lights_main_beam && (
+                            <span title="High Beam On">
+                              <Lightbulb className="w-3 h-3 text-blue-500" />
+                            </span>
+                          )}
+                          {vehicle.lights_dipped_beam && (
+                            <span title="Low Beam On">
+                              <Lightbulb className="w-3 h-3 text-blue-400" />
+                            </span>
+                          )}
+                          {vehicle.lights_side && (
+                            <span title="Side Lights On">
+                              <Lightbulb className="w-3 h-3 text-gray-400" />
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -289,8 +378,13 @@ export default function VehicleDashboard() {
                       <span>{vehicle.range_km?.toFixed(0) || "N/A"} km</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Thermometer className="w-4 h-4 text-muted-foreground" />
-                      <span>{vehicle.exterior_temp_c?.toFixed(0) || "N/A"}°C</span>
+                      <Thermometer className={`w-4 h-4 ${vehicle.hvac_state === 'on' ? 'text-blue-500' : 'text-muted-foreground'}`} />
+                      <span className="flex items-center gap-1">
+                        {vehicle.interior_temp_c?.toFixed(0) || "N/A"}°C
+                        {vehicle.hvac_state === 'on' && vehicle.remote_temperature && (
+                          <span className="text-xs text-blue-500">→{vehicle.remote_temperature}°</span>
+                        )}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Gauge className="w-4 h-4 text-muted-foreground" />
@@ -307,6 +401,57 @@ export default function VehicleDashboard() {
                       </span>
                     </div>
                   )}
+
+                  {/* Door Status Display */}
+                  {(() => {
+                    const doorStatus = getDoorStatus(vehicle)
+                    const hasIssues = doorStatus.hasOpenDoors ||
+                                     vehicle.bonnet_closed === false
+
+                    if (hasIssues) {
+                      return (
+                        <div className="flex items-start gap-2 text-sm mb-3 p-2 bg-orange-500/10 border border-orange-500/20 rounded-md">
+                          <AlertTriangle className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex flex-col gap-1 text-xs">
+                            {doorStatus.hasOpenDoors && (
+                              <span className="text-orange-600 dark:text-orange-400">
+                                Open: {doorStatus.openDoors.join(", ")}
+                              </span>
+                            )}
+                            {vehicle.bonnet_closed === false && (
+                              <span className="text-orange-600 dark:text-orange-400">
+                                Hood Open
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+
+                    // Show compact status when all closed
+                    return (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
+                        <div className="flex items-center gap-2">
+                          {vehicle.doors_locked ? (
+                            <>
+                              <Lock className="w-3 h-3" />
+                              <span>Locked & Secure</span>
+                            </>
+                          ) : (
+                            <>
+                              <Unlock className="w-3 h-3" />
+                              <span>Unlocked</span>
+                            </>
+                          )}
+                        </div>
+                        {vehicle.boot_locked === false && (
+                          <span className="text-muted-foreground/60 text-[10px]">
+                            Boot Unlocked
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {vehicle.charging_state === "Charging" && vehicle.charge_power_kw && (
                     <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 mb-3">
@@ -347,14 +492,11 @@ export default function VehicleDashboard() {
                       className="flex-1"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleClimateCommand(
-                          vehicle.vin,
-                          vehicle.hvac_state === "on" ? "off" : "on"
-                        )
+                        toggleClimateControls(vehicle.vin)
                       }}
                     >
-                      <Wind className="w-4 h-4 mr-1" />
-                      {vehicle.hvac_state === "on" ? "Stop" : "Start"} A/C
+                      <Thermometer className="w-4 h-4 mr-1" />
+                      Climate
                     </Button>
                     {vehicle.charging_state === "Charging" ? (
                       <Button
@@ -383,6 +525,138 @@ export default function VehicleDashboard() {
                         Charge
                       </Button>
                     )}
+                  </div>
+
+                  {/* Expanded Climate Controls */}
+                  {showClimateControls[vehicle.vin] && (
+                    <div className="mt-3 p-3 border rounded-lg bg-muted/50">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-medium">Climate Control</span>
+                        <Badge variant={vehicle.hvac_state === "on" ? "default" : "secondary"}>
+                          {vehicle.hvac_state === "on" ? "Active" : "Off"}
+                        </Badge>
+                      </div>
+
+                      {/* Temperature Selector */}
+                      <div className="flex items-center justify-between mb-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            adjustTemp(vehicle.vin, -1)
+                          }}
+                          disabled={getTargetTemp(vehicle.vin) <= 17}
+                        >
+                          <Minus className="w-4 h-4" />
+                        </Button>
+                        <div className="flex flex-col items-center">
+                          <span className="text-2xl font-bold">{getTargetTemp(vehicle.vin)}°C</span>
+                          <span className="text-xs text-muted-foreground">Target Temperature</span>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            adjustTemp(vehicle.vin, 1)
+                          }}
+                          disabled={getTargetTemp(vehicle.vin) >= 33}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      {/* Climate Action Buttons */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          size="sm"
+                          variant={vehicle.hvac_state === "on" ? "destructive" : "default"}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (vehicle.hvac_state === "on") {
+                              handleClimateCommand(vehicle.vin, "off")
+                            } else {
+                              handleClimateCommand(vehicle.vin, "on", getTargetTemp(vehicle.vin))
+                            }
+                          }}
+                        >
+                          {vehicle.hvac_state === "on" ? (
+                            <>
+                              <Wind className="w-4 h-4 mr-1" />
+                              Stop A/C
+                            </>
+                          ) : (
+                            <>
+                              <Snowflake className="w-4 h-4 mr-1" />
+                              Start A/C
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleClimateCommand(vehicle.vin, "blowingonly")
+                          }}
+                        >
+                          <Fan className="w-4 h-4 mr-1" />
+                          Fan Only
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleClimateCommand(vehicle.vin, "front")
+                          }}
+                        >
+                          <Wind className="w-4 h-4 mr-1" />
+                          Defrost
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Find My Car Controls */}
+                  <div className="flex gap-2 mt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleFindMyCarCommand(vehicle.vin, "activate")
+                      }}
+                    >
+                      <MapPinned className="w-4 h-4 mr-1" />
+                      Find
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleFindMyCarCommand(vehicle.vin, "lights_only")
+                      }}
+                    >
+                      <Lightbulb className="w-4 h-4 mr-1" />
+                      Lights
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleFindMyCarCommand(vehicle.vin, "horn_only")
+                      }}
+                    >
+                      <Bell className="w-4 h-4 mr-1" />
+                      Horn
+                    </Button>
                   </div>
                 </Card>
               ))}

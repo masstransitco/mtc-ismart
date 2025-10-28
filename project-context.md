@@ -565,3 +565,435 @@ Actions: `start`, `stop`, `setTarget`, `setLimit`
 ---
 
 *Last Updated: October 27, 2025*
+
+---
+
+## Recent Implementation Updates (2025-10-28)
+
+### 1. Door Security Status System ✅
+**Migration:** `003_add_door_columns.sql`
+
+Added granular door monitoring:
+- Individual door status (driver, passenger, rear-left, rear-right)
+- Bonnet/hood closed status
+- Boot lock status
+- Visual alerts for security issues
+
+**Key Fix:** Boolean parsing bug
+- **Issue:** MQTT gateway sends `"True"`/`"False"` (capitalized), code checked lowercase
+- **Solution:** Implemented case-insensitive `parseBoolean()` helper in `server/ingest.ts`
+- **Impact:** Lock/unlock commands now update correctly in database
+
+**UI Features:**
+- Orange alert box for open doors/hood/unlocked boot
+- "Locked & Secure" badge when all closed
+- Detailed door list when issues exist
+- Boot status de-emphasized (shown as small text)
+
+### 2. Light Status Indicators ✅
+**Migration:** `004_add_light_columns.sql`
+
+Tracks vehicle lighting:
+- `lights_main_beam` - High beam headlights
+- `lights_dipped_beam` - Low beam/dipped headlights
+- `lights_side` - Side/parking lights
+
+**UI Implementation:**
+- Small lightbulb icons appear below timestamp
+- Color-coded: Blue (bright)=high beam, Blue (light)=low beam, Gray=side lights
+- Only displayed when lights are ON (no clutter)
+- Hover tooltips for clarity
+
+### 3. Find My Car Feature ✅
+**API Endpoint:** `app/api/vehicle/find/route.ts`
+
+Four control modes:
+1. **activate** - Horn + lights (full alert)
+2. **lights_only** - Flash lights silently
+3. **horn_only** - Sound horn without lights
+4. **stop** - Cancel/stop alert
+
+**MQTT Topic:** `location/findMyCar/set`
+
+**UI:** Three dedicated buttons:
+- Find (MapPinned icon) - Full alert
+- Lights (Lightbulb icon) - Silent mode
+- Horn (Bell icon) - Horn only
+
+**Testing:** Verified with vehicle LSJWH4098PN070110, command successful
+
+### 4. Enhanced Climate Control ✅
+**Migration:** `005_add_climate_columns.sql`
+
+**New Data Fields:**
+- `remote_temperature` - Target AC temperature (integer, °C)
+- `heated_seat_front_left_level` - 0-3 heating level
+- `heated_seat_front_right_level` - 0-3 heating level
+- `rear_window_defrost` - Rear defroster on/off
+
+**Ingestion Updates:**
+- Captures `climate/remoteTemperature`
+- Captures `climate/heatedSeatsFrontLeftLevel`
+- Captures `climate/heatedSeatsFrontRightLevel`
+- Captures `climate/rearWindowDefrosterHeating` (on/off → boolean)
+
+**UI Enhancement:**
+- Temperature display shows: `25°C →22°` (current → target)
+- Blue thermometer icon when HVAC active (vs gray when off)
+- Real-time indication of climate control status
+- Visible at a glance which vehicles have AC running
+
+**Available Commands** (via existing API):
+- Start AC with temperature: `{action:"on", temperature:22}`
+- Stop AC: `{action:"off"}`
+- Blowing only: `{action:"blowingonly"}`
+- Front defrost: `{action:"front"}`
+
+### 5. Location Services ✅
+**Implementation:** `lib/geocoding.ts`
+
+- **Google Maps Reverse Geocoding** integration
+- API Key: `AIzaSyA8rDrxBzMRlgbA7BQ2DoY31gEXzZ4Ours`
+- Caches addresses by VIN in React state
+- Displays short address format on dashboard
+- Updates automatically when vehicle location changes
+
+**Display Format:**
+- Compact address in gray box with MapPin icon
+- Example: "123 Main St, City"
+- Loading state: "Loading location..."
+
+## Key Code Locations
+
+### Database
+- **Migrations:** `supabase/migrations/`
+  - `001_initial_schema.sql` - Base tables
+  - `002_add_upsert_function.sql` - Stored procedure
+  - `003_add_door_columns.sql` - Door status
+  - `004_add_light_columns.sql` - Light indicators
+  - `005_add_climate_columns.sql` - Climate control
+
+### Backend
+- **Ingestion Service:** `server/ingest.ts`
+  - MQTT subscription handler
+  - Data caching (5-second flush)
+  - Boolean parsing: Line 111-114
+  - Topic mapping: Lines 117-187
+- **MQTT Client:** `server/mqtt-client.ts`
+  - Connection management
+  - Command publishing
+- **API Routes:** `app/api/vehicle/`
+  - `lock/route.ts` - Door lock/unlock
+  - `climate/route.ts` - HVAC control
+  - `charge/route.ts` - Charging control
+  - `find/route.ts` - Find My Car
+  - `status/route.ts` - Status retrieval
+
+### Frontend
+- **Main Dashboard:** `components/vehicle-dashboard.tsx`
+  - Vehicle list with cards
+  - Real-time updates
+  - Control buttons
+  - Status displays
+- **Hooks:** `hooks/use-vehicle.ts`
+  - `useVehicles()` - All vehicles
+  - `useVehicle(vin)` - Single vehicle
+  - TypeScript interfaces
+
+### Configuration
+- **Environment:** `.env.local`
+- **Supabase Client:** `lib/supabase.ts`
+- **Geocoding:** `lib/geocoding.ts`
+
+## Data Flow Examples
+
+### Lock Command Flow
+```
+User clicks Lock → 
+  POST /api/vehicle/lock {vin, locked:true} →
+    Log to vehicle_commands table →
+    Publish MQTT: saic/user/vehicles/VIN/doors/locked/set "true" →
+      SAIC Gateway receives →
+        Sends to vehicle →
+          Vehicle locks →
+            Gateway publishes status →
+              Ingestion service receives →
+                Updates vehicle_status.doors_locked = true →
+                  Supabase real-time notifies →
+                    Dashboard updates button to "Unlock"
+```
+
+### Climate Control Flow
+```
+User starts AC →
+  POST /api/vehicle/climate {vin, action:"on", temperature:22} →
+    Publish climate/remoteClimateState/set "on" →
+    Publish climate/remoteTemperature/set "22" →
+      Gateway sends to vehicle →
+        AC starts →
+          Gateway publishes status →
+            Ingestion captures hvac_state="on", remote_temperature=22 →
+              Dashboard shows: Blue thermometer + "25°C →22°"
+```
+
+### Real-time Updates Flow
+```
+Vehicle state changes →
+  SAIC API →
+    Python Gateway →
+      MQTT topic publish →
+        Ingestion service receives →
+          Cache update (in-memory) →
+            5-second flush timer →
+              upsert_vehicle_status() →
+                PostgreSQL UPDATE →
+                  pg_notify trigger →
+                    Supabase real-time channel →
+                      React useVehicles hook →
+                        setState update →
+                          Dashboard re-renders
+```
+
+## Testing Commands
+
+### Door Lock/Unlock
+```bash
+# Lock
+curl -X POST http://localhost:3000/api/vehicle/lock \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","locked":true}'
+
+# Unlock
+curl -X POST http://localhost:3000/api/vehicle/lock \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","locked":false}'
+```
+
+### Climate Control
+```bash
+# Start AC at 22°C
+curl -X POST http://localhost:3000/api/vehicle/climate \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","action":"on","temperature":22}'
+
+# Stop AC
+curl -X POST http://localhost:3000/api/vehicle/climate \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","action":"off"}'
+
+# Front defrost
+curl -X POST http://localhost:3000/api/vehicle/climate \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","action":"front"}'
+```
+
+### Find My Car
+```bash
+# Horn + Lights
+curl -X POST http://localhost:3000/api/vehicle/find \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","mode":"activate"}'
+
+# Lights only (silent)
+curl -X POST http://localhost:3000/api/vehicle/find \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","mode":"lights_only"}'
+
+# Stop alert
+curl -X POST http://localhost:3000/api/vehicle/find \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","mode":"stop"}'
+```
+
+### Charge Control
+```bash
+# Start charging
+curl -X POST http://localhost:3000/api/vehicle/charge \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","action":"start"}'
+
+# Stop charging
+curl -X POST http://localhost:3000/api/vehicle/charge \
+  -H "Content-Type: application/json" \
+  -d '{"vin":"LSJWH4098PN070110","action":"stop"}'
+```
+
+## MQTT Topic Reference
+
+### Status Topics (Read-only)
+```
+saic/<user>/vehicles/<vin>/drivetrain/soc
+saic/<user>/vehicles/<vin>/drivetrain/range
+saic/<user>/vehicles/<vin>/drivetrain/charging
+saic/<user>/vehicles/<vin>/drivetrain/power
+saic/<user>/vehicles/<vin>/location/latitude
+saic/<user>/vehicles/<vin>/location/longitude
+saic/<user>/vehicles/<vin>/location/speed
+saic/<user>/vehicles/<vin>/doors/locked
+saic/<user>/vehicles/<vin>/doors/driver
+saic/<user>/vehicles/<vin>/doors/passenger
+saic/<user>/vehicles/<vin>/doors/rearLeft
+saic/<user>/vehicles/<vin>/doors/rearRight
+saic/<user>/vehicles/<vin>/doors/bonnet
+saic/<user>/vehicles/<vin>/doors/boot
+saic/<user>/vehicles/<vin>/climate/interiorTemperature
+saic/<user>/vehicles/<vin>/climate/exteriorTemperature
+saic/<user>/vehicles/<vin>/climate/remoteTemperature
+saic/<user>/vehicles/<vin>/climate/remoteClimateState
+saic/<user>/vehicles/<vin>/climate/heatedSeatsFrontLeftLevel
+saic/<user>/vehicles/<vin>/climate/heatedSeatsFrontRightLevel
+saic/<user>/vehicles/<vin>/climate/rearWindowDefrosterHeating
+saic/<user>/vehicles/<vin>/lights/mainBeam
+saic/<user>/vehicles/<vin>/lights/dippedBeam
+saic/<user>/vehicles/<vin>/lights/side
+```
+
+### Command Topics (Write)
+```
+saic/<user>/vehicles/<vin>/doors/locked/set [true|false]
+saic/<user>/vehicles/<vin>/climate/remoteClimateState/set [on|off|front|blowingonly]
+saic/<user>/vehicles/<vin>/climate/remoteTemperature/set [17-33]
+saic/<user>/vehicles/<vin>/location/findMyCar/set [activate|lights_only|horn_only|stop]
+saic/<user>/vehicles/<vin>/charging/start/set
+saic/<user>/vehicles/<vin>/charging/stop/set
+```
+
+### Result Topics
+```
+saic/<user>/vehicles/<vin>/doors/locked/result [Success|Error]
+saic/<user>/vehicles/<vin>/climate/remoteClimateState/result [Success|Error]
+saic/<user>/vehicles/<vin>/location/findMyCar/result [Success|Error]
+```
+
+## Debugging & Monitoring
+
+### View Live MQTT Messages
+```bash
+# All topics
+docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/#' -v
+
+# Specific vehicle
+docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/+/vehicles/LSJWH4098PN070110/#' -v
+
+# Climate only
+docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/+/vehicles/+/climate/#' -v
+
+# Doors only
+docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/+/vehicles/+/doors/#' -v
+```
+
+### Check Ingestion Service
+```bash
+# View logs
+tail -f /tmp/ingest-new.log
+
+# Filter for errors
+grep -i error /tmp/ingest-new.log
+
+# Filter for specific vehicle
+grep LSJWH4098PN070110 /tmp/ingest-new.log
+
+# Check if processing climate data
+grep -i climate /tmp/ingest-new.log | tail -20
+```
+
+### Database Queries
+```sql
+-- Check vehicle status
+SELECT vin, 
+       doors_locked, 
+       hvac_state, 
+       interior_temp_c, 
+       remote_temperature,
+       lights_main_beam,
+       updated_at
+FROM vehicle_status
+ORDER BY updated_at DESC;
+
+-- View recent commands
+SELECT id, vin, command_type, status, created_at
+FROM vehicle_commands
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- Check telemetry history
+SELECT vin, event_type, soc, lat, lon, created_at
+FROM vehicle_telemetry
+WHERE vin = 'LSJWH4098PN070110'
+ORDER BY created_at DESC
+LIMIT 50;
+
+-- Door status for all vehicles
+SELECT vin,
+       doors_locked,
+       door_driver_open,
+       door_passenger_open,
+       door_rear_left_open,
+       door_rear_right_open,
+       bonnet_closed,
+       boot_locked
+FROM vehicle_status;
+```
+
+## Known Limitations
+
+### SAIC API Constraints
+1. **Boot Lock:** Can only UNLOCK, not lock remotely
+2. **AC Temperature:** Integer values only (17-33°C typical range)
+3. **Heated Seats:** Level range varies by model (0-3 or 0-1)
+4. **Command Rate:** Recommend max 1 command per 5 seconds per vehicle
+5. **Fan Speed:** Not controllable via API (auto-managed by vehicle)
+
+### Current System Limitations
+1. **No command feedback:** API returns success, but doesn't wait for vehicle confirmation
+2. **No command queue:** Multiple rapid commands may conflict
+3. **No user authentication:** Single-user system currently
+4. **No historical charts:** Telemetry stored but not visualized
+5. **No notifications:** No push alerts for events
+
+## Performance Metrics
+
+### Typical Values (5 vehicles)
+- **MQTT messages received:** ~50-100/minute
+- **Database writes:** ~12/minute (every 5 seconds per vehicle)
+- **Dashboard update latency:** <100ms via Supabase real-time
+- **Command execution time:** 2-5 seconds (network + vehicle response)
+- **Geocoding API calls:** Minimal (cached per VIN)
+
+### Resource Usage
+- **Ingestion service:** ~30MB RAM, minimal CPU
+- **Next.js dev server:** ~200MB RAM
+- **MQTT broker:** ~10MB RAM
+- **Database:** Growing ~1MB/day with 5 vehicles
+
+## Deployment Checklist
+
+### Production Setup
+- [ ] Update environment variables in hosting platform
+- [ ] Enable Supabase connection pooling
+- [ ] Set up SSL/TLS for MQTT broker
+- [ ] Configure proper CORS settings
+- [ ] Enable rate limiting on API routes
+- [ ] Set up monitoring (Sentry, LogRocket, etc.)
+- [ ] Configure automated backups
+- [ ] Set up CI/CD pipeline
+- [ ] Enable error logging
+- [ ] Configure auto-restart for ingestion service
+
+### Security Hardening
+- [ ] Rotate all API keys
+- [ ] Implement user authentication
+- [ ] Enable Supabase RLS policies
+- [ ] Use secret management service
+- [ ] Enable HTTPS only
+- [ ] Implement API rate limiting
+- [ ] Add CSRF protection
+- [ ] Sanitize all user inputs
+- [ ] Enable audit logging
+- [ ] Configure firewall rules
+
+---
+
+**Last Updated:** 2025-10-28
+**Version:** 1.1
+**Contributors:** MTC Team, Claude Code

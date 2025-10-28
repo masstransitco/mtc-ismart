@@ -23,6 +23,10 @@ export interface VehicleStatus {
   gps_accuracy: number | null
   location_updated_at: string | null
   doors_locked: boolean | null
+  door_driver_open: boolean | null
+  door_passenger_open: boolean | null
+  door_rear_left_open: boolean | null
+  door_rear_right_open: boolean | null
   windows_state: any
   boot_locked: boolean | null
   bonnet_closed: boolean | null
@@ -33,6 +37,13 @@ export interface VehicleStatus {
   ignition: boolean | null
   engine_running: boolean | null
   odometer_km: number | null
+  lights_main_beam: boolean | null
+  lights_dipped_beam: boolean | null
+  lights_side: boolean | null
+  remote_temperature: number | null
+  heated_seat_front_left_level: number | null
+  heated_seat_front_right_level: number | null
+  rear_window_defrost: boolean | null
   last_message_ts: string | null
   last_api_call_ts: string | null
   gateway_status: string | null

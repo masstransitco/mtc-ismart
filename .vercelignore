@@ -1,0 +1,33 @@
+# Vercel ignore file - exclude files not needed for deployment
+
+# Docker files (not needed on Vercel)
+docker-compose.yml
+docker/
+Dockerfile
+.dockerignore
+
+# Server-side scripts that run separately
+server/ingest.ts
+
+# Environment files (use Vercel env vars instead)
+.env.local
+.env.mg
+.env.cli
+
+# Development files
+.git/
+.gitignore
+node_modules/
+.next/
+
+# Documentation
+README.md
+project-context.md
+
+# Logs
+*.log
+logs/
+
+# Supabase local development
+supabase/.branches
+supabase/.temp

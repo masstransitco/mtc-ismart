@@ -1,0 +1,56 @@
+FROM ubuntu:24.04
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    mosquitto \
+    mosquitto-clients \
+    python3 \
+    python3-pip \
+    python3-venv \
+    nodejs \
+    npm \
+    supervisor \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python SAIC gateway
+RUN pip3 install saic-ismart-client-ng --break-system-packages
+
+# Create app directory
+WORKDIR /app
+
+# Copy application files
+COPY server/ /app/server/
+COPY package.json package-lock.json tsconfig.json /app/
+COPY lib/ /app/lib/
+COPY hooks/ /app/hooks/
+
+# Install Node dependencies
+RUN npm install --production
+
+# Copy MQTT config
+COPY docker/mosquitto/config/mosquitto-cloud.conf /etc/mosquitto/mosquitto.conf
+
+# Copy environment file template
+COPY .env.local /app/.env.production
+
+# Copy supervisor config
+COPY docker/cloud-run/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create required directories
+RUN mkdir -p /mosquitto/data /mosquitto/log && \
+    chown -R mosquitto:mosquitto /mosquitto
+
+# Expose MQTT port
+EXPOSE 1883
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD mosquitto_sub -t '$SYS/#' -C 1 -i healthcheck -W 3 || exit 1
+
+# Start supervisor to manage all services
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
