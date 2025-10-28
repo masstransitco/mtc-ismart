@@ -59,7 +59,10 @@ export function publishCommand(
   payload: string | object
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const topic = `saic/${vin}/cmd/${command}`
+    // SAIC gateway expects topic format: saic/{user}/vehicles/{vin}/{command}
+    // Get SAIC user from environment (same as gateway config)
+    const saicUser = process.env.SAIC_USER || 'system@air.city'
+    const topic = `saic/${saicUser}/vehicles/${vin}/${command}`
     const message = typeof payload === 'string' ? payload : JSON.stringify(payload)
 
     client.publish(topic, message, { qos: 1 }, (error) => {
