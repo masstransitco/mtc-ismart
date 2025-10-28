@@ -1,0 +1,15 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'docker/cloud-run/Dockerfile.all-in-one'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:latest'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:$BUILD_ID'
+      - '.'
+images:
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:latest'
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:$BUILD_ID'
+timeout: 1200s

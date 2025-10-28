@@ -38,9 +38,6 @@ COPY hooks/ /app/hooks/
 # Copy MQTT config
 COPY docker/mosquitto/config/mosquitto-cloud.conf /etc/mosquitto/mosquitto.conf
 
-# Copy environment file template
-COPY .env.local /app/.env.production
-
 # Copy supervisor config
 COPY docker/cloud-run/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
