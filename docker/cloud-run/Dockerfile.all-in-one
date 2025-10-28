@@ -23,11 +23,11 @@ RUN pip3 install saic-ismart-client-ng --break-system-packages
 # Create app directory
 WORKDIR /app
 
-# Copy package files first for better layer caching
-COPY package.json package-lock.json /app/
+# Copy package file
+COPY package.json /app/
 
-# Install Node dependencies (use ci for lockfile)
-RUN npm ci --omit=dev || npm install --omit=dev
+# Install Node dependencies (without lockfile to avoid version issues)
+RUN npm install --omit=dev
 
 # Copy application files
 COPY server/ /app/server/
