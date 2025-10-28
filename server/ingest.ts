@@ -68,131 +68,142 @@ function extractVin(topic: string): string | null {
   return null
 }
 
+// Cache to accumulate vehicle data before writing
+const vehicleDataCache: Map<string, Partial<VehicleStatusPayload> & { lastUpdate: number }> = new Map()
+const CACHE_FLUSH_INTERVAL = 5000 // Flush every 5 seconds
+
 async function handleMessage(topic: string, message: Buffer) {
   try {
-    const payload = safeParse(message.toString())
     const vin = extractVin(topic)
-
     if (!vin) {
       console.warn(`[Ingest] Could not extract VIN from topic: ${topic}`)
       return
     }
 
-    console.log(`[Ingest] Received message for VIN ${vin} on topic ${topic}`)
+    // Parse the value - SAIC gateway sends individual values, not JSON objects
+    const value = message.toString().trim()
+    const parsedValue = safeParse(value)
+    const actualValue = parsedValue.value !== undefined ? parsedValue.value : parsedValue
 
-    // Ensure vehicle exists
-    const { error: vehicleError } = await supabase
-      .from('vehicles')
-      .upsert(
-        { vin, updated_at: new Date().toISOString() },
-        { onConflict: 'vin' }
-      )
+    console.log(`[Ingest] ${vin}: ${topic.split('/').slice(-2).join('/')} = ${value}`)
 
-    if (vehicleError) {
-      console.error('[Ingest] Error upserting vehicle:', vehicleError)
+    // Get or create cache entry for this VIN
+    let cache = vehicleDataCache.get(vin)
+    if (!cache) {
+      cache = { lastUpdate: Date.now() }
+      vehicleDataCache.set(vin, cache)
+
+      // Ensure vehicle exists
+      await supabase
+        .from('vehicles')
+        .upsert(
+          { vin, updated_at: new Date().toISOString() },
+          { onConflict: 'vin' }
+        )
     }
 
-    // Handle status updates
-    if (topic.includes('/status/')) {
-      await handleStatusUpdate(vin, topic, payload)
+    // Map SAIC topics to our database fields
+    if (topic.includes('/drivetrain/soc')) {
+      cache.soc = parseFloat(actualValue)
+      cache.soc_precise = parseFloat(actualValue)
+    } else if (topic.includes('/drivetrain/range')) {
+      cache.range_km = parseFloat(actualValue)
+    } else if (topic.includes('/drivetrain/charging')) {
+      cache.charging_state = actualValue === 'true' || actualValue === true ? 'Charging' : 'Idle'
+    } else if (topic.includes('/drivetrain/current')) {
+      cache.charge_current_a = parseFloat(actualValue)
+    } else if (topic.includes('/drivetrain/voltage')) {
+      cache.charge_voltage_v = parseFloat(actualValue)
+    } else if (topic.includes('/drivetrain/power')) {
+      cache.charge_power_kw = parseFloat(actualValue) / 1000 // Convert W to kW
+    } else if (topic.includes('/drivetrain/mileage')) {
+      cache.odometer_km = parseFloat(actualValue)
+    } else if (topic.includes('/drivetrain/running')) {
+      cache.ignition = actualValue === 'true' || actualValue === true
+      cache.engine_running = actualValue === 'true' || actualValue === true
+    } else if (topic.includes('/location/latitude')) {
+      cache.lat = parseFloat(actualValue)
+    } else if (topic.includes('/location/longitude')) {
+      cache.lon = parseFloat(actualValue)
+    } else if (topic.includes('/location/elevation')) {
+      cache.altitude = parseFloat(actualValue)
+    } else if (topic.includes('/location/heading')) {
+      cache.bearing = parseFloat(actualValue)
+    } else if (topic.includes('/location/speed')) {
+      cache.speed = parseFloat(actualValue)
+    } else if (topic.includes('/doors/locked')) {
+      cache.doors_locked = actualValue === 'true' || actualValue === true
+    } else if (topic.includes('/doors/boot')) {
+      cache.boot_locked = actualValue === 'true' || actualValue === true
+    } else if (topic.includes('/climate/interiorTemperature')) {
+      cache.interior_temp_c = parseFloat(actualValue)
+    } else if (topic.includes('/climate/exteriorTemperature')) {
+      cache.exterior_temp_c = parseFloat(actualValue)
+    } else if (topic.includes('/climate/remoteClimateState')) {
+      cache.hvac_state = actualValue
     }
 
-    // Handle events
-    if (topic.includes('/events/')) {
-      await handleEvent(vin, topic, payload)
-    }
-
-    // Insert telemetry record for significant events
-    if (shouldRecordTelemetry(topic, payload)) {
-      await insertTelemetry(vin, topic, payload)
-    }
+    cache.lastUpdate = Date.now()
   } catch (error) {
     console.error('[Ingest] Error processing message:', error)
   }
 }
 
-async function handleStatusUpdate(
-  vin: string,
-  topic: string,
-  payload: any
-) {
-  const statusData: VehicleStatusPayload = {}
+// Flush cached data to database periodically
+setInterval(async () => {
+  for (const [vin, cache] of vehicleDataCache.entries()) {
+    // Only flush if we have data and it's been updated recently
+    if (Object.keys(cache).length > 1 && Date.now() - cache.lastUpdate < 60000) {
+      try {
+        const { lastUpdate, ...statusData } = cache
 
-  // Map payload fields to our schema
-  if (payload.soc !== undefined) statusData.soc = payload.soc
-  if (payload.socPrecise !== undefined) statusData.soc_precise = payload.socPrecise
-  if (payload.rangeKm !== undefined) statusData.range_km = payload.rangeKm
-  if (payload.chargingState !== undefined) statusData.charging_state = payload.chargingState
-  if (payload.currentA !== undefined) statusData.charge_current_a = payload.currentA
-  if (payload.voltageV !== undefined) statusData.charge_voltage_v = payload.voltageV
-  if (payload.powerKw !== undefined) statusData.charge_power_kw = payload.powerKw
-  if (payload.lat !== undefined) statusData.lat = payload.lat
-  if (payload.lon !== undefined) statusData.lon = payload.lon
-  if (payload.altitude !== undefined) statusData.altitude = payload.altitude
-  if (payload.bearing !== undefined) statusData.bearing = payload.bearing
-  if (payload.speed !== undefined) statusData.speed = payload.speed
-  if (payload.doorsLocked !== undefined) statusData.doors_locked = payload.doorsLocked
-  if (payload.windows !== undefined) statusData.windows_state = payload.windows
-  if (payload.bootLocked !== undefined) statusData.boot_locked = payload.bootLocked
-  if (payload.interiorTemp !== undefined) statusData.interior_temp_c = payload.interiorTemp
-  if (payload.exteriorTemp !== undefined) statusData.exterior_temp_c = payload.exteriorTemp
-  if (payload.hvacState !== undefined) statusData.hvac_state = payload.hvacState
-  if (payload.ignition !== undefined) statusData.ignition = payload.ignition
-  if (payload.engineRunning !== undefined) statusData.engine_running = payload.engineRunning
-  if (payload.odometerKm !== undefined) statusData.odometer_km = payload.odometerKm
+        if (Object.keys(statusData).length > 0) {
+          const { error } = await supabase.rpc('upsert_vehicle_status', {
+            p_vin: vin,
+            p_data: statusData as any,
+          })
 
-  if (Object.keys(statusData).length > 0) {
-    const { error } = await supabase.rpc('upsert_vehicle_status', {
-      p_vin: vin,
-      p_data: statusData as any,
-    })
+          if (error) {
+            console.error(`[Ingest] Error upserting ${vin}:`, error)
+          } else {
+            console.log(`[Ingest] ✓ Updated ${vin} with ${Object.keys(statusData).length} fields`)
+          }
 
-    if (error) {
-      console.error('[Ingest] Error upserting vehicle status:', error)
-    } else {
-      console.log(`[Ingest] Updated status for VIN ${vin}`)
+          // Record telemetry for significant updates
+          if (statusData.soc !== undefined || statusData.lat !== undefined) {
+            await insertTelemetry(vin, statusData)
+          }
+        }
+      } catch (error) {
+        console.error(`[Ingest] Error flushing ${vin}:`, error)
+      }
     }
   }
-}
+}, CACHE_FLUSH_INTERVAL)
 
-async function handleEvent(vin: string, topic: string, payload: any) {
-  // Log events for future analysis
-  console.log(`[Ingest] Event for ${vin}:`, topic, payload)
-}
-
-function shouldRecordTelemetry(topic: string, payload: any): boolean {
-  // Record telemetry for charging, location, and significant state changes
-  if (topic.includes('/status/charge')) return true
-  if (topic.includes('/status/location')) return true
-  if (topic.includes('/status/battery')) return true
-  if (payload.chargingState && payload.chargingState !== 'Idle') return true
-  return false
-}
-
-async function insertTelemetry(vin: string, topic: string, payload: any) {
-  const eventType = topic.includes('/charge')
+async function insertTelemetry(vin: string, statusData: Partial<VehicleStatusPayload>) {
+  const eventType = statusData.soc !== undefined
     ? 'charge'
-    : topic.includes('/location')
+    : statusData.lat !== undefined
     ? 'location'
     : 'vehicle_state'
 
   const telemetryData = {
     vin,
     event_type: eventType,
-    soc: payload.soc,
-    soc_precise: payload.socPrecise,
-    range_km: payload.rangeKm,
-    charging_state: payload.chargingState,
-    charge_power_kw: payload.powerKw,
-    charge_current_a: payload.currentA,
-    charge_voltage_v: payload.voltageV,
-    battery_temp_c: payload.batteryTemp,
-    lat: payload.lat,
-    lon: payload.lon,
-    altitude: payload.altitude,
-    bearing: payload.bearing,
-    speed: payload.speed,
-    raw_payload: payload,
+    soc: statusData.soc,
+    soc_precise: statusData.soc_precise,
+    range_km: statusData.range_km,
+    charging_state: statusData.charging_state,
+    charge_power_kw: statusData.charge_power_kw,
+    charge_current_a: statusData.charge_current_a,
+    charge_voltage_v: statusData.charge_voltage_v,
+    lat: statusData.lat,
+    lon: statusData.lon,
+    altitude: statusData.altitude,
+    bearing: statusData.bearing,
+    speed: statusData.speed,
+    raw_payload: statusData,
   }
 
   const { error } = await supabase.from('vehicle_telemetry').insert(telemetryData)
@@ -218,17 +229,19 @@ export function startIngestion() {
   client.on('connect', async () => {
     console.log('[Ingest] Connected to MQTT broker')
 
-    // Subscribe to all vehicle topics
+    // Subscribe to SAIC gateway's actual topic structure
     const topics = [
-      'saic/+/vehicles/+/status/#',
-      'saic/+/vehicles/+/events/#',
-      'mg/+/status/#',
-      'mg/+/events/#',
+      'saic/+/vehicles/+/drivetrain/#',   // Battery, charge, range, mileage
+      'saic/+/vehicles/+/location/#',     // GPS, heading, speed
+      'saic/+/vehicles/+/climate/#',      // Temperature, HVAC
+      'saic/+/vehicles/+/doors/#',        // Lock status, windows
+      'saic/+/vehicles/+/refresh/#',      // Refresh state
     ]
 
     try {
       await subscribeToTopics(client, topics)
       console.log('[Ingest] Subscribed to topics:', topics)
+      console.log('[Ingest] Waiting for vehicle data...')
     } catch (error) {
       console.error('[Ingest] Failed to subscribe:', error)
     }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useVehicles } from "@/hooks/use-vehicle"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -21,14 +21,33 @@ import {
   Thermometer,
   Gauge,
   Clock,
+  Navigation,
 } from "lucide-react"
 import { VehicleStatus } from "@/hooks/use-vehicle"
+import { reverseGeocode } from "@/lib/geocoding"
 
 export default function VehicleDashboard() {
   const { vehicles, loading, error, refetch } = useVehicles()
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleStatus | null>(null)
+  const [locations, setLocations] = useState<Record<string, string>>({})
   const { toast } = useToast()
+
+  // Geocode vehicle locations when they update
+  useEffect(() => {
+    vehicles.forEach((vehicle) => {
+      if (vehicle.lat && vehicle.lon && !locations[vehicle.vin]) {
+        reverseGeocode(vehicle.lat, vehicle.lon).then((result) => {
+          if (result) {
+            setLocations((prev) => ({
+              ...prev,
+              [vehicle.vin]: result.shortAddress,
+            }))
+          }
+        })
+      }
+    })
+  }, [vehicles])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -253,7 +272,7 @@ export default function VehicleDashboard() {
                       <span>{vehicle.soc?.toFixed(1) || "N/A"}%</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
+                      <Navigation className="w-4 h-4 text-muted-foreground" />
                       <span>{vehicle.range_km?.toFixed(0) || "N/A"} km</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -265,6 +284,16 @@ export default function VehicleDashboard() {
                       <span>{vehicle.speed?.toFixed(0) || 0} km/h</span>
                     </div>
                   </div>
+
+                  {/* Location Display */}
+                  {vehicle.lat && vehicle.lon && (
+                    <div className="flex items-start gap-2 text-sm mb-3 p-2 bg-accent/50 rounded-md">
+                      <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                      <span className="text-muted-foreground text-xs leading-relaxed">
+                        {locations[vehicle.vin] || "Loading location..."}
+                      </span>
+                    </div>
+                  )}
 
                   {vehicle.charging_state === "Charging" && vehicle.charge_power_kw && (
                     <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 mb-3">
