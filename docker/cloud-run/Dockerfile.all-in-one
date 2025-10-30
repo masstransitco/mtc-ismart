@@ -45,8 +45,8 @@ COPY docker/cloud-run/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN mkdir -p /mosquitto/data /mosquitto/log && \
     chown -R mosquitto:mosquitto /mosquitto
 
-# Expose MQTT port
-EXPOSE 1883
+# Expose ports
+EXPOSE 1883 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

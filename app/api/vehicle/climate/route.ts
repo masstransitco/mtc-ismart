@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getMqttClient, publishCommand } from '@/server/mqtt-client'
-import { createClient } from '@/lib/supabase'
 
 export async function POST(req: NextRequest) {
   try {
@@ -21,80 +19,23 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const supabase = createClient()
+    // Forward to Cloud Run backend command API
+    const backendUrl = process.env.BACKEND_API_URL || 'https://mqtt.air.zone'
+    const response = await fetch(`${backendUrl}/api/vehicle/climate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ vin, action, temperature }),
+    })
 
-    // Log command to database
-    const { data: commandLog, error: logError } = await supabase
-      .from('vehicle_commands')
-      .insert({
-        vin,
-        command_type: 'climate',
-        command_payload: { action, temperature },
-        status: 'pending',
-      })
-      .select()
-      .single()
+    const data = await response.json()
 
-    if (logError) {
-      console.error('[API] Error logging command:', logError)
+    if (!response.ok) {
+      return NextResponse.json(data, { status: response.status })
     }
 
-    // Publish to MQTT
-    const mqttConfig = {
-      brokerUrl: process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
-      username: process.env.MQTT_USER || 'mtc_app',
-      password: process.env.MQTT_PASSWORD || '',
-    }
-
-    const client = getMqttClient(mqttConfig)
-
-    try {
-      // Set climate state
-      await publishCommand(
-        client,
-        vin,
-        'climate/remoteClimateState/set',
-        action
-      )
-
-      // Set temperature if provided
-      if (temperature && action === 'on') {
-        await publishCommand(
-          client,
-          vin,
-          'climate/remoteTemperature/set',
-          temperature.toString()
-        )
-      }
-
-      // Update command status
-      if (commandLog) {
-        await supabase
-          .from('vehicle_commands')
-          .update({ status: 'sent', completed_at: new Date().toISOString() })
-          .eq('id', commandLog.id)
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: `Climate control ${action} command sent`,
-        commandId: commandLog?.id,
-      })
-    } catch (error) {
-      // Update command status to failed
-      if (commandLog) {
-        await supabase
-          .from('vehicle_commands')
-          .update({
-            status: 'failed',
-            error_message: error instanceof Error ? error.message : 'Unknown error',
-            completed_at: new Date().toISOString(),
-          })
-          .eq('id', commandLog.id)
-      }
-
-      throw error
-    }
+    return NextResponse.json(data)
   } catch (error) {
     console.error('[API] Climate command error:', error)
     return NextResponse.json(

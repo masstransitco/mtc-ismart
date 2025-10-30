@@ -994,6 +994,405 @@ FROM vehicle_status;
 
 ---
 
+---
+
+## Production Deployment (2025-10-28)
+
+### 🎯 Deployment Architecture
+
+The system is now deployed to production using a distributed cloud architecture:
+
+```
+Internet
+  ↓
+┌──────────────────────────────────────────────────────────┐
+│ Cloudflare (DNS + SSL + CDN)                             │
+│  ├─ mtc.air.zone → Vercel                                │
+│  └─ mqtt.air.zone → Cloudflare Tunnel → Cloud Run        │
+└──────────────────────────────────────────────────────────┘
+  ↓                                   ↓
+┌──────────────────────┐      ┌─────────────────────────────┐
+│ Vercel (Dashboard)   │      │ Google Cloud Run (Backend)  │
+│ ─────────────────    │      │ ────────────────────────    │
+│ Next.js 16 App       │      │ Ubuntu 24.04 Container      │
+│ React 19 Frontend    │      │  ├─ Mosquitto MQTT:1883     │
+│ Real-time UI         │      │  ├─ SAIC Python Gateway     │
+│ API Routes           │      │  └─ Node.js Ingestion       │
+└──────────┬───────────┘      └─────────────┬───────────────┘
+           │                                 │
+           └─────────────┬───────────────────┘
+                         ↓
+                  ┌──────────────┐
+                  │ Supabase DB  │
+                  │ PostgreSQL   │
+                  │ Realtime     │
+                  └──────────────┘
+```
+
+### 📦 Deployed Components
+
+#### 1. Google Cloud Run (Backend - MQTT + Ingestion)
+- **Service Name**: `mtc-backend`
+- **URL**: https://mtc-backend-880316754524.asia-east1.run.app
+- **Region**: asia-east1 (Hong Kong)
+- **Project**: cityos-392102
+- **Resources**:
+  - Memory: 2GB
+  - CPU: 2 vCPU
+  - Min Instances: 1
+  - Max Instances: 3
+  - Timeout: 3600s (1 hour)
+  - No CPU throttling (always-on)
+- **Container**:
+  - Base Image: ubuntu:24.04
+  - Services: Supervisor managing 3 processes
+    1. Mosquitto MQTT Broker (port 1883)
+    2. SAIC Python Gateway (connects to MG iSmart API)
+    3. Node.js Ingestion Service (writes to Supabase)
+- **Artifact Registry**: asia-east1-docker.pkg.dev/cityos-392102/mtc-containers/mtc-backend:latest
+
+#### 2. Vercel (Dashboard)
+- **Production URL**: https://mtc.air.zone
+- **Preview URL**: https://mtc-ismart-pynyxof9m-masstransitcos-projects.vercel.app
+- **Framework**: Next.js 16.0.0
+- **Region**: Hong Kong (hkg1)
+- **Deployment**: Automatic from GitHub main branch
+- **Environment Variables**:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `SUPABASE_SERVICE_ROLE_KEY`
+  - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
+  - `MQTT_BROKER_URL=mqtt://mqtt.air.zone:1883`
+  - `SAIC_USER=system@air.city`
+
+#### 3. Cloudflare Tunnel (MQTT Access)
+- **Tunnel Name**: mtc-mqtt
+- **Tunnel ID**: 78bb8393-ab8f-4605-b763-5c653bf93540
+- **Credentials**: /Users/markau/.cloudflared/78bb8393-ab8f-4605-b763-5c653bf93540.json
+- **Configuration**: ~/.cloudflared/config.yml
+- **Ingress**:
+  - mqtt.air.zone → https://mtc-backend-880316754524.asia-east1.run.app
+- **Status**: Running locally (needs to be installed as service)
+
+#### 4. DNS Configuration (Cloudflare)
+Domain: `air.zone`
+- **CNAME Record**: `mqtt` → `78bb8393-ab8f-4605-b763-5c653bf93540.cfargotunnel.com` (Proxied)
+- **CNAME Record**: `mtc` → `cname.vercel-dns.com` (Proxied)
+
+### 🔧 Deployment Files
+
+#### Cloud Build Configuration
+**File**: `cloudbuild.yaml`
+```yaml
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'docker/cloud-run/Dockerfile.all-in-one'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:latest'
+      - '-t'
+      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:$BUILD_ID'
+      - '.'
+images:
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:latest'
+  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:$BUILD_ID'
+timeout: 1200s
+```
+
+#### Production Dockerfile
+**File**: `docker/cloud-run/Dockerfile.all-in-one`
+- Base: ubuntu:24.04
+- Installs: mosquitto, python3, nodejs, npm, supervisor
+- Python Gateway: saic-ismart-client-ng
+- Copies: server/, lib/, hooks/, package.json
+- Config: mosquitto-cloud.conf, supervisord.conf
+- Exposes: Port 1883 (MQTT)
+- Health Check: mosquitto_sub test every 30s
+
+#### Cloud Ignore
+**File**: `.gcloudignore`
+- Excludes: node_modules/, .next/, .env.*, documentation, IDE files
+- Includes: Server code, Docker configs, package.json
+
+#### Vercel Configuration
+**File**: `vercel.json`
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "regions": ["hkg1"]
+}
+```
+Note: Environment variables managed via Vercel Dashboard (not in vercel.json)
+
+### 🚀 Deployment Commands
+
+#### Deploy to Cloud Run
+```bash
+# Build with Cloud Build
+gcloud builds submit --config cloudbuild.yaml
+
+# Deploy to Cloud Run
+gcloud run deploy mtc-backend \
+  --image=asia-east1-docker.pkg.dev/cityos-392102/mtc-containers/mtc-backend:latest \
+  --platform=managed \
+  --region=asia-east1 \
+  --allow-unauthenticated \
+  --memory=2Gi \
+  --cpu=2 \
+  --port=1883 \
+  --min-instances=1 \
+  --max-instances=3 \
+  --timeout=3600 \
+  --no-cpu-throttling \
+  --set-env-vars="MQTT_URI=tcp://localhost:1883,SAIC_USER=system@air.city,..."
+```
+
+#### Deploy to Vercel
+```bash
+# Production deployment (automatic via GitHub)
+git push origin main
+
+# Manual deployment
+npx vercel deploy --prod
+
+# Add custom domain
+npx vercel domains add mtc.air.zone
+```
+
+#### Setup Cloudflare Tunnel
+```bash
+# Create tunnel
+cloudflared tunnel create mtc-mqtt
+
+# Configure tunnel
+cat > ~/.cloudflared/config.yml << EOF
+tunnel: 78bb8393-ab8f-4605-b763-5c653bf93540
+credentials-file: /Users/markau/.cloudflared/78bb8393-ab8f-4605-b763-5c653bf93540.json
+ingress:
+  - hostname: mqtt.air.zone
+    service: https://mtc-backend-880316754524.asia-east1.run.app
+  - service: http_status:404
+EOF
+
+# Run tunnel
+cloudflared tunnel run mtc-mqtt
+
+# Install as service (macOS)
+sudo cloudflared service install
+
+# Install as service (Linux)
+sudo cloudflared service install --legacy
+```
+
+### 📊 Production Monitoring
+
+#### View Cloud Run Logs
+```bash
+# Real-time logs
+gcloud run logs tail mtc-backend --region=asia-east1
+
+# Filter for specific service
+gcloud run logs tail mtc-backend --region=asia-east1 | grep gateway
+gcloud run logs tail mtc-backend --region=asia-east1 | grep ingest
+gcloud run logs tail mtc-backend --region=asia-east1 | grep mosquitto
+
+# View specific time range
+gcloud run logs read mtc-backend --region=asia-east1 --limit=100
+```
+
+#### Check Service Status
+```bash
+# Cloud Run service info
+gcloud run services describe mtc-backend --region=asia-east1
+
+# Vercel deployments
+npx vercel ls mtc-ismart
+
+# Cloudflare tunnel info
+cloudflared tunnel info mtc-mqtt
+```
+
+#### Test Production Endpoints
+```bash
+# Dashboard
+curl -I https://mtc.air.zone
+
+# MQTT tunnel (via Cloudflare)
+curl -I https://mqtt.air.zone
+
+# Cloud Run direct
+curl -I https://mtc-backend-880316754524.asia-east1.run.app
+```
+
+### ⚙️ Environment Variables
+
+#### Cloud Run Environment Variables
+Set via `--set-env-vars` flag:
+- `MQTT_URI=tcp://localhost:1883`
+- `SAIC_USER=system@air.city`
+- `SAIC_PASSWORD=ac202303`
+- `SAIC_REST_URI=https://gateway-mg-eu.soimt.com/api.app/v1/`
+- `SAIC_REGION=eu`
+- `SAIC_TENANT_ID=459771`
+- `NEXT_PUBLIC_SUPABASE_URL=https://sssyxnpanayqvamstind.supabase.co`
+- `SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...`
+- `MQTT_BROKER_URL=mqtt://localhost:1883`
+- `NODE_ENV=production`
+
+#### Vercel Environment Variables
+Set via Vercel Dashboard or CLI:
+- `NEXT_PUBLIC_SUPABASE_URL` (Production)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Production)
+- `SUPABASE_SERVICE_ROLE_KEY` (Production)
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (Production)
+- `MQTT_BROKER_URL=mqtt://mqtt.air.zone:1883` (Production)
+- `SAIC_USER=system@air.city` (Production)
+
+### 🔒 Security Notes
+
+#### Access Control
+- Cloud Run: Unauthenticated access (public)
+- Vercel: Public dashboard
+- MQTT: Currently anonymous (TODO: Add authentication)
+- Supabase: Row Level Security enabled
+
+#### Secrets Management
+- Cloud Run: Environment variables (encrypted at rest)
+- Vercel: Environment variables (encrypted)
+- Cloudflare: Tunnel credentials file (local)
+- **TODO**: Migrate to Google Secret Manager
+
+#### SSL/TLS
+- ✅ Dashboard: Cloudflare SSL/TLS (Full)
+- ✅ MQTT Tunnel: Cloudflare SSL termination
+- ⚠️ MQTT Protocol: Currently unencrypted internally
+- **TODO**: Enable MQTT TLS on broker (port 8883)
+
+### 💰 Cost Estimation
+
+Monthly costs (estimated):
+- **Google Cloud Run**: $10-15 (with free tier)
+  - 2GB RAM × 1-3 instances × 730 hours
+  - Free tier: 2M requests, 360K GB-seconds
+- **Vercel**: Free (Hobby plan)
+  - 100GB bandwidth included
+  - Hong Kong edge functions
+- **Cloudflare**: Free
+  - DNS + CDN
+  - Tunnel service
+- **Supabase**: Free (with usage limits)
+  - 500MB database
+  - 1GB file storage
+  - 2GB bandwidth
+- **Total**: ~$10-15/month (or less with free tiers)
+
+### 🐛 Troubleshooting Production
+
+#### Dashboard Not Loading
+1. Check Vercel deployment status: `npx vercel ls`
+2. Check DNS: `dig mtc.air.zone`
+3. Check browser console for errors
+4. Verify environment variables in Vercel dashboard
+
+#### MQTT Connection Failed
+1. Check Cloudflare Tunnel: `ps aux | grep cloudflared`
+2. Test DNS: `dig mqtt.air.zone`
+3. Check Cloud Run logs: `gcloud run logs tail mtc-backend`
+4. Verify tunnel config: `cat ~/.cloudflared/config.yml`
+
+#### No Vehicle Data
+1. Check Cloud Run is running: `gcloud run services describe mtc-backend`
+2. View ingestion logs: `gcloud run logs tail mtc-backend | grep ingest`
+3. Check Supabase connection
+4. Verify SAIC gateway credentials
+
+#### Cloudflare Tunnel Down
+```bash
+# Check if running
+ps aux | grep cloudflared
+
+# Restart tunnel
+cloudflared tunnel run mtc-mqtt &
+
+# Install as permanent service
+sudo cloudflared service install
+```
+
+### 📋 Production Checklist
+
+#### ✅ Completed
+- [x] Cloud Run backend deployed
+- [x] Docker image built and pushed to Artifact Registry
+- [x] Vercel dashboard deployed
+- [x] Custom domain configured (mtc.air.zone)
+- [x] Cloudflare Tunnel created and running
+- [x] DNS records configured
+- [x] Environment variables set
+- [x] Supabase database connected
+- [x] SAIC gateway connected to iSmart API
+- [x] Real-time updates working
+
+#### ⚠️ Pending
+- [ ] Install Cloudflare Tunnel as permanent service
+- [ ] Enable MQTT authentication (username/password)
+- [ ] Configure MQTT TLS/SSL (port 8883)
+- [ ] Set up Cloud Run auto-scaling rules
+- [ ] Configure Vercel production environment variables for all environments
+- [ ] Enable Google Cloud monitoring/alerting
+- [ ] Set up automated backups for Supabase
+- [ ] Add error tracking (Sentry/LogRocket)
+- [ ] Configure rate limiting
+- [ ] Implement user authentication
+- [ ] Add health check endpoints
+- [ ] Document disaster recovery procedures
+
+### 🔄 Update Procedures
+
+#### Deploy Code Changes
+```bash
+# 1. Make changes locally
+# 2. Test locally
+npm run build
+npm run dev
+
+# 3. Commit and push
+git add -A
+git commit -m "Your changes"
+git push origin main
+
+# 4. Cloud Run auto-deploys via Cloud Build
+# 5. Vercel auto-deploys from GitHub
+# 6. Monitor deployments
+npx vercel ls
+gcloud run services describe mtc-backend
+```
+
+#### Update Environment Variables
+```bash
+# Vercel
+npx vercel env add VARIABLE_NAME production
+
+# Cloud Run (requires redeployment)
+gcloud run deploy mtc-backend \
+  --update-env-vars="NEW_VAR=value"
+```
+
+#### Roll Back Deployment
+```bash
+# Vercel - redeploy previous version
+npx vercel rollback
+
+# Cloud Run - deploy previous image
+gcloud run deploy mtc-backend \
+  --image=asia-east1-docker.pkg.dev/cityos-392102/mtc-containers/mtc-backend:PREVIOUS_BUILD_ID
+```
+
+---
+
 **Last Updated:** 2025-10-28
-**Version:** 1.1
+**Version:** 1.2 - Production Deployment
 **Contributors:** MTC Team, Claude Code
