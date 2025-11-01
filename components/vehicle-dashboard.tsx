@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import Image from "next/image"
+import { useTheme } from "next-themes"
 import { useVehicles } from "@/hooks/use-vehicle"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -32,18 +34,38 @@ import {
   Minus,
   Fan,
   Snowflake,
+  Sun,
+  Moon,
 } from "lucide-react"
 import { VehicleStatus } from "@/hooks/use-vehicle"
 import { reverseGeocode } from "@/lib/geocoding"
 
 export default function VehicleDashboard() {
   const { vehicles, loading, error, refetch } = useVehicles()
+  const { theme, setTheme } = useTheme()
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVehicle, setSelectedVehicle] = useState<VehicleStatus | null>(null)
   const [locations, setLocations] = useState<Record<string, string>>({})
   const [targetTemps, setTargetTemps] = useState<Record<string, number>>({})
   const [showClimateControls, setShowClimateControls] = useState<Record<string, boolean>>({})
+  const [mounted, setMounted] = useState(false)
+  const [commandLoading, setCommandLoading] = useState<Record<string, boolean>>({})
+  const [currentTime, setCurrentTime] = useState(new Date())
   const { toast } = useToast()
+
+  // Prevent hydration mismatch with theme
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // Update current time every second to keep timestamps fresh
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [])
 
   // Geocode vehicle locations when they update
   useEffect(() => {
@@ -61,6 +83,36 @@ export default function VehicleDashboard() {
     })
   }, [vehicles])
 
+  // Use ref to avoid stale closures in the effect
+  const commandLoadingRef = useRef(commandLoading)
+  commandLoadingRef.current = commandLoading
+
+  // Re-enable buttons when vehicle status changes (Realtime updates)
+  useEffect(() => {
+    vehicles.forEach((vehicle) => {
+      const lockCommandKey = `lock-${vehicle.vin}`
+      const climateCommandKey = `climate-${vehicle.vin}-${vehicle.hvac_state === 'on' ? 'off' : 'on'}`
+
+      // Re-enable lock/unlock button when status updates
+      if (commandLoadingRef.current[lockCommandKey]) {
+        setCommandLoading(prev => ({ ...prev, [lockCommandKey]: false }))
+        toast({
+          title: "Confirmed",
+          description: `Vehicle ${vehicle.doors_locked ? 'locked' : 'unlocked'} confirmed`,
+        })
+      }
+
+      // Re-enable climate button when status updates
+      if (commandLoadingRef.current[climateCommandKey]) {
+        setCommandLoading(prev => ({ ...prev, [climateCommandKey]: false }))
+        toast({
+          title: "Confirmed",
+          description: `Climate ${vehicle.hvac_state} confirmed`,
+        })
+      }
+    })
+  }, [vehicles, toast])
+
   const handleRefresh = async () => {
     setRefreshing(true)
     await refetch()
@@ -72,6 +124,9 @@ export default function VehicleDashboard() {
   }
 
   const handleLockCommand = async (vin: string, locked: boolean) => {
+    const commandKey = `lock-${vin}`
+    setCommandLoading(prev => ({ ...prev, [commandKey]: true }))
+
     try {
       const response = await fetch("/api/vehicle/lock", {
         method: "POST",
@@ -82,10 +137,12 @@ export default function VehicleDashboard() {
       const data = await response.json()
 
       if (data.success) {
+        // Show immediate success feedback
         toast({
-          title: locked ? "Vehicle Locked" : "Vehicle Unlocked",
-          description: `Command sent successfully`,
+          title: "Success!",
+          description: `Vehicle ${locked ? 'lock' : 'unlock'} command sent successfully`,
         })
+        // Button stays disabled - will be re-enabled when Realtime update arrives
       } else {
         throw new Error(data.error || "Command failed")
       }
@@ -95,10 +152,14 @@ export default function VehicleDashboard() {
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       })
+      setCommandLoading(prev => ({ ...prev, [commandKey]: false }))
     }
   }
 
   const handleClimateCommand = async (vin: string, action: string, temperature?: number) => {
+    const commandKey = `climate-${vin}-${action}`
+    setCommandLoading(prev => ({ ...prev, [commandKey]: true }))
+
     try {
       const response = await fetch("/api/vehicle/climate", {
         method: "POST",
@@ -109,12 +170,14 @@ export default function VehicleDashboard() {
       const data = await response.json()
 
       if (data.success) {
+        // Show immediate success feedback
         toast({
-          title: "Climate Control",
+          title: "Success!",
           description: temperature
             ? `Climate ${action} at ${temperature}°C command sent`
             : `Climate ${action} command sent`,
         })
+        // Button stays disabled - will be re-enabled when Realtime update arrives
       } else {
         throw new Error(data.error || "Command failed")
       }
@@ -124,10 +187,14 @@ export default function VehicleDashboard() {
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       })
+      setCommandLoading(prev => ({ ...prev, [commandKey]: false }))
     }
   }
 
   const handleChargeCommand = async (vin: string, action: string) => {
+    const commandKey = `charge-${vin}-${action}`
+    setCommandLoading(prev => ({ ...prev, [commandKey]: true }))
+
     try {
       const response = await fetch("/api/vehicle/charge", {
         method: "POST",
@@ -138,10 +205,12 @@ export default function VehicleDashboard() {
       const data = await response.json()
 
       if (data.success) {
+        // Show immediate success feedback
         toast({
-          title: "Charge Control",
-          description: `Charge ${action} command sent`,
+          title: "Success!",
+          description: `Charging ${action} command sent successfully`,
         })
+        // Button stays disabled - will be re-enabled when Realtime update arrives
       } else {
         throw new Error(data.error || "Command failed")
       }
@@ -151,6 +220,7 @@ export default function VehicleDashboard() {
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       })
+      setCommandLoading(prev => ({ ...prev, [commandKey]: false }))
     }
   }
 
@@ -169,6 +239,9 @@ export default function VehicleDashboard() {
   }
 
   const handleFindMyCarCommand = async (vin: string, mode: string) => {
+    const commandKey = `find-${vin}-${mode}`
+    setCommandLoading(prev => ({ ...prev, [commandKey]: true }))
+
     try {
       const response = await fetch("/api/vehicle/find", {
         method: "POST",
@@ -180,9 +253,14 @@ export default function VehicleDashboard() {
 
       if (data.success) {
         toast({
-          title: "Find My Car",
+          title: "Success!",
           description: data.message,
         })
+
+        // Auto-clear loading after 5 seconds (horn/lights are momentary actions)
+        setTimeout(() => {
+          setCommandLoading(prev => ({ ...prev, [commandKey]: false }))
+        }, 5000)
       } else {
         throw new Error(data.error || "Command failed")
       }
@@ -192,6 +270,7 @@ export default function VehicleDashboard() {
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       })
+      setCommandLoading(prev => ({ ...prev, [commandKey]: false }))
     }
   }
 
@@ -217,11 +296,12 @@ export default function VehicleDashboard() {
   const formatTimestamp = (ts: string | null) => {
     if (!ts) return "N/A"
     const date = new Date(ts)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
+    const diffMs = currentTime.getTime() - date.getTime()
+    const diffSecs = Math.floor(diffMs / 1000)
     const diffMins = Math.floor(diffMs / 60000)
 
-    if (diffMins < 1) return "Just now"
+    if (diffSecs < 10) return "Just now"
+    if (diffSecs < 60) return `${diffSecs}s ago`
     if (diffMins < 60) return `${diffMins}m ago`
     if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`
     return `${Math.floor(diffMins / 1440)}d ago`
@@ -266,27 +346,62 @@ export default function VehicleDashboard() {
 
   return (
     <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <Car className="w-8 h-8 text-primary" />
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">MTC iSmart</h1>
-              <p className="text-xs text-muted-foreground">
+      {/* Header - Modern Minimal Design - Responsive */}
+      <header className="sticky top-0 z-50 border-b bg-card/95 backdrop-blur-lg supports-[backdrop-filter]:bg-card/60">
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
+          <div className="flex items-center gap-2 md:gap-4">
+            {/* MTC Logo - Theme Aware - Responsive */}
+            <div className="logo-hover">
+              {mounted && (
+                <Image
+                  src="/logos/mtc-logo-2025.svg"
+                  alt="MTC Logo"
+                  width={120}
+                  height={40}
+                  priority
+                  className="h-8 md:h-10 w-auto"
+                />
+              )}
+            </div>
+            <Separator orientation="vertical" className="h-6 md:h-8 hidden sm:block" />
+            <div className="flex flex-col">
+              <h1 className="text-base md:text-xl font-semibold tracking-tight text-foreground">
+                iSmart Fleet
+              </h1>
+              <p className="text-xs md:text-sm text-muted-foreground">
                 {vehicles.length} vehicle{vehicles.length !== 1 ? "s" : ""}
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
+
+          <div className="flex items-center gap-1 md:gap-2">
+            {/* Theme Toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className="smooth-transition"
+            >
+              {mounted && theme === "dark" ? (
+                <Sun className="h-5 w-5" />
+              ) : (
+                <Moon className="h-5 w-5" />
+              )}
+              <span className="sr-only">Toggle theme</span>
+            </Button>
+
+            {/* Refresh Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="smooth-transition"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -304,28 +419,41 @@ export default function VehicleDashboard() {
           </div>
         ) : (
           <ScrollArea className="h-full">
-            <div className="p-4 space-y-3">
+            <div className="p-3 md:p-4 space-y-2 md:space-y-3">
               {vehicles.map((vehicle) => (
                 <Card
                   key={vehicle.vin}
-                  className="p-4 cursor-pointer hover:bg-accent transition-colors"
+                  className="p-3 md:p-5 cursor-pointer card-hover border-border/50 bg-card/50 backdrop-blur-sm"
                   onClick={() => setSelectedVehicle(vehicle)}
                 >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <Battery
-                        className={`w-6 h-6 ${
-                          vehicle.charging_state === "Charging"
-                            ? "text-green-500"
-                            : "text-muted-foreground"
-                        }`}
-                      />
-                      <div>
-                        <h3 className="font-semibold text-foreground">
-                          {vehicle.vehicles?.label || vehicle.vin}
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
+                  <div className="flex items-start justify-between mb-3 md:mb-4">
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <div className="p-1.5 md:p-2 rounded-lg bg-accent/50">
+                        <Battery
+                          className={`w-5 h-5 md:w-6 md:h-6 ${
+                            vehicle.charging_state === "Charging"
+                              ? "text-green-500"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                      </div>
+                      <div className="space-y-0.5 md:space-y-1">
+                        <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
+                          <h3 className="font-semibold text-foreground text-sm md:text-base">
+                            {vehicle.vehicles?.label || vehicle.vin}
+                          </h3>
+                          {vehicle.vehicles?.plate_number && (
+                            <Badge
+                              variant="secondary"
+                              className="font-mono text-[10px] md:text-xs px-1.5 md:px-2 py-0.5 bg-primary/10 text-primary border-primary/20"
+                            >
+                              {vehicle.vehicles.plate_number}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-[10px] md:text-xs text-muted-foreground">
                           {vehicle.vehicles?.model || "Unknown Model"}
+                          {vehicle.vehicles?.year && ` • ${vehicle.vehicles.year}`}
                         </p>
                       </div>
                     </div>
@@ -368,35 +496,55 @@ export default function VehicleDashboard() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                    <div className="flex items-center gap-2">
-                      <Battery className="w-4 h-4 text-muted-foreground" />
-                      <span>{vehicle.soc?.toFixed(1) || "N/A"}%</span>
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-accent/30 smooth-transition hover:bg-accent/50">
+                      <div className="p-1.5 rounded-md bg-background/50">
+                        <Battery className="w-4 h-4 text-green-500" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Battery</span>
+                        <span className="text-sm font-semibold">{vehicle.soc?.toFixed(1) || "N/A"}%</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Navigation className="w-4 h-4 text-muted-foreground" />
-                      <span>{vehicle.range_km?.toFixed(0) || "N/A"} km</span>
+                    <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-accent/30 smooth-transition hover:bg-accent/50">
+                      <div className="p-1.5 rounded-md bg-background/50">
+                        <Navigation className="w-4 h-4 text-blue-500" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Range</span>
+                        <span className="text-sm font-semibold">{vehicle.range_km?.toFixed(0) || "N/A"} km</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Thermometer className={`w-4 h-4 ${vehicle.hvac_state === 'on' ? 'text-blue-500' : 'text-muted-foreground'}`} />
-                      <span className="flex items-center gap-1">
-                        {vehicle.interior_temp_c?.toFixed(0) || "N/A"}°C
-                        {vehicle.hvac_state === 'on' && vehicle.remote_temperature && (
-                          <span className="text-xs text-blue-500">→{vehicle.remote_temperature}°</span>
-                        )}
-                      </span>
+                    <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-accent/30 smooth-transition hover:bg-accent/50">
+                      <div className="p-1.5 rounded-md bg-background/50">
+                        <Thermometer className={`w-4 h-4 ${vehicle.hvac_state === 'on' ? 'text-orange-500' : 'text-muted-foreground'}`} />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Temp</span>
+                        <span className="text-sm font-semibold flex items-center gap-1">
+                          {vehicle.interior_temp_c?.toFixed(0) || "N/A"}°C
+                          {vehicle.hvac_state === 'on' && vehicle.remote_temperature && (
+                            <span className="text-xs text-orange-500">→{vehicle.remote_temperature}°</span>
+                          )}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Gauge className="w-4 h-4 text-muted-foreground" />
-                      <span>{vehicle.speed?.toFixed(0) || 0} km/h</span>
+                    <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-accent/30 smooth-transition hover:bg-accent/50">
+                      <div className="p-1.5 rounded-md bg-background/50">
+                        <Gauge className="w-4 h-4 text-purple-500" />
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-xs text-muted-foreground">Speed</span>
+                        <span className="text-sm font-semibold">{vehicle.speed?.toFixed(0) || 0} km/h</span>
+                      </div>
                     </div>
                   </div>
 
                   {/* Location Display */}
                   {vehicle.lat && vehicle.lon && (
-                    <div className="flex items-start gap-2 text-sm mb-3 p-2 bg-accent/50 rounded-md">
-                      <MapPin className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                      <span className="text-muted-foreground text-xs leading-relaxed">
+                    <div className="flex items-start gap-2.5 mb-3 p-3 bg-gradient-to-r from-accent/40 to-accent/20 rounded-lg border border-border/30">
+                      <MapPin className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
+                      <span className="text-foreground/80 text-sm leading-relaxed">
                         {locations[vehicle.vin] || "Loading location..."}
                       </span>
                     </div>
@@ -462,19 +610,25 @@ export default function VehicleDashboard() {
                     </div>
                   )}
 
-                  <Separator className="my-3" />
+                  <Separator className="my-2 md:my-3" />
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 md:gap-2">
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 min-h-[44px] md:min-h-[36px]"
+                      disabled={commandLoading[`lock-${vehicle.vin}`]}
                       onClick={(e) => {
                         e.stopPropagation()
                         handleLockCommand(vehicle.vin, !vehicle.doors_locked)
                       }}
                     >
-                      {vehicle.doors_locked ? (
+                      {commandLoading[`lock-${vehicle.vin}`] ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                          Processing...
+                        </>
+                      ) : vehicle.doors_locked ? (
                         <>
                           <Unlock className="w-4 h-4 mr-1" />
                           Unlock
@@ -489,7 +643,7 @@ export default function VehicleDashboard() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 min-h-[44px] md:min-h-[36px]"
                       onClick={(e) => {
                         e.stopPropagation()
                         toggleClimateControls(vehicle.vin)
@@ -502,27 +656,37 @@ export default function VehicleDashboard() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="flex-1"
+                        className="flex-1 min-h-[44px] md:min-h-[36px]"
+                        disabled={commandLoading[`charge-${vehicle.vin}-stop`]}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleChargeCommand(vehicle.vin, "stop")
                         }}
                       >
-                        <Zap className="w-4 h-4 mr-1" />
-                        Stop
+                        {commandLoading[`charge-${vehicle.vin}-stop`] ? (
+                          <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                        ) : (
+                          <Zap className="w-4 h-4 mr-1" />
+                        )}
+                        {commandLoading[`charge-${vehicle.vin}-stop`] ? "Stopping..." : "Stop"}
                       </Button>
                     ) : (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="flex-1"
+                        className="flex-1 min-h-[44px] md:min-h-[36px]"
+                        disabled={commandLoading[`charge-${vehicle.vin}-start`]}
                         onClick={(e) => {
                           e.stopPropagation()
                           handleChargeCommand(vehicle.vin, "start")
                         }}
                       >
-                        <Zap className="w-4 h-4 mr-1" />
-                        Charge
+                        {commandLoading[`charge-${vehicle.vin}-start`] ? (
+                          <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                        ) : (
+                          <Zap className="w-4 h-4 mr-1" />
+                        )}
+                        {commandLoading[`charge-${vehicle.vin}-start`] ? "Starting..." : "Charge"}
                       </Button>
                     )}
                   </div>
@@ -572,6 +736,7 @@ export default function VehicleDashboard() {
                         <Button
                           size="sm"
                           variant={vehicle.hvac_state === "on" ? "destructive" : "default"}
+                          disabled={commandLoading[`climate-${vehicle.vin}-${vehicle.hvac_state === "on" ? "off" : "on"}`]}
                           onClick={(e) => {
                             e.stopPropagation()
                             if (vehicle.hvac_state === "on") {
@@ -581,7 +746,12 @@ export default function VehicleDashboard() {
                             }
                           }}
                         >
-                          {vehicle.hvac_state === "on" ? (
+                          {commandLoading[`climate-${vehicle.vin}-${vehicle.hvac_state === "on" ? "off" : "on"}`] ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                              {vehicle.hvac_state === "on" ? "Stopping..." : "Starting..."}
+                            </>
+                          ) : vehicle.hvac_state === "on" ? (
                             <>
                               <Wind className="w-4 h-4 mr-1" />
                               Stop A/C
@@ -596,66 +766,91 @@ export default function VehicleDashboard() {
                         <Button
                           size="sm"
                           variant="outline"
+                          disabled={commandLoading[`climate-${vehicle.vin}-blowingonly`]}
                           onClick={(e) => {
                             e.stopPropagation()
                             handleClimateCommand(vehicle.vin, "blowingonly")
                           }}
                         >
-                          <Fan className="w-4 h-4 mr-1" />
-                          Fan Only
+                          {commandLoading[`climate-${vehicle.vin}-blowingonly`] ? (
+                            <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <Fan className="w-4 h-4 mr-1" />
+                          )}
+                          {commandLoading[`climate-${vehicle.vin}-blowingonly`] ? "Starting..." : "Fan Only"}
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
+                          disabled={commandLoading[`climate-${vehicle.vin}-front`]}
                           onClick={(e) => {
                             e.stopPropagation()
                             handleClimateCommand(vehicle.vin, "front")
                           }}
                         >
-                          <Wind className="w-4 h-4 mr-1" />
-                          Defrost
+                          {commandLoading[`climate-${vehicle.vin}-front`] ? (
+                            <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                          ) : (
+                            <Wind className="w-4 h-4 mr-1" />
+                          )}
+                          {commandLoading[`climate-${vehicle.vin}-front`] ? "Starting..." : "Defrost"}
                         </Button>
                       </div>
                     </div>
                   )}
 
                   {/* Find My Car Controls */}
-                  <div className="flex gap-2 mt-2">
+                  <div className="flex gap-2 mt-2 md:mt-2">
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 min-h-[44px] md:min-h-[36px]"
+                      disabled={commandLoading[`find-${vehicle.vin}-activate`]}
                       onClick={(e) => {
                         e.stopPropagation()
                         handleFindMyCarCommand(vehicle.vin, "activate")
                       }}
                     >
-                      <MapPinned className="w-4 h-4 mr-1" />
-                      Find
+                      {commandLoading[`find-${vehicle.vin}-activate`] ? (
+                        <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <MapPinned className="w-4 h-4 mr-1" />
+                      )}
+                      {commandLoading[`find-${vehicle.vin}-activate`] ? "..." : "Find"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 min-h-[44px] md:min-h-[36px]"
+                      disabled={commandLoading[`find-${vehicle.vin}-lights_only`]}
                       onClick={(e) => {
                         e.stopPropagation()
                         handleFindMyCarCommand(vehicle.vin, "lights_only")
                       }}
                     >
-                      <Lightbulb className="w-4 h-4 mr-1" />
-                      Lights
+                      {commandLoading[`find-${vehicle.vin}-lights_only`] ? (
+                        <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Lightbulb className="w-4 h-4 mr-1" />
+                      )}
+                      {commandLoading[`find-${vehicle.vin}-lights_only`] ? "..." : "Lights"}
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1"
+                      className="flex-1 min-h-[44px] md:min-h-[36px]"
+                      disabled={commandLoading[`find-${vehicle.vin}-horn_only`]}
                       onClick={(e) => {
                         e.stopPropagation()
                         handleFindMyCarCommand(vehicle.vin, "horn_only")
                       }}
                     >
-                      <Bell className="w-4 h-4 mr-1" />
-                      Horn
+                      {commandLoading[`find-${vehicle.vin}-horn_only`] ? (
+                        <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
+                      ) : (
+                        <Bell className="w-4 h-4 mr-1" />
+                      )}
+                      {commandLoading[`find-${vehicle.vin}-horn_only`] ? "..." : "Horn"}
                     </Button>
                   </div>
                 </Card>
