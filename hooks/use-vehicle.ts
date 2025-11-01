@@ -53,6 +53,7 @@ export interface VehicleStatus {
     label: string | null
     model: string | null
     year: number | null
+    plate_number: string | null
   }
 }
 
@@ -105,7 +106,17 @@ export function useVehicle(vin: string) {
           setStatus((prev) => ({ ...prev, ...payload.new } as VehicleStatus))
         }
       )
-      .subscribe()
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[useVehicle] ✓ Realtime subscribed for vehicle ${vin}`)
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error(`[useVehicle] ❌ Realtime error for vehicle ${vin}:`, err)
+          setError(`Realtime connection failed: ${err?.message || 'Unknown error'}`)
+        } else if (status === 'TIMED_OUT') {
+          console.error(`[useVehicle] ⏱️  Realtime timeout for vehicle ${vin}`)
+          setError('Realtime connection timed out')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
@@ -175,7 +186,17 @@ export function useVehicles() {
           }
         }
       )
-      .subscribe()
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[useVehicles] ✓ Realtime subscribed for all vehicles')
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('[useVehicles] ❌ Realtime error:', err)
+          setError(`Realtime connection failed: ${err?.message || 'Unknown error'}`)
+        } else if (status === 'TIMED_OUT') {
+          console.error('[useVehicles] ⏱️  Realtime timeout')
+          setError('Realtime connection timed out')
+        }
+      })
 
     return () => {
       supabase.removeChannel(channel)
