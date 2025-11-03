@@ -3,7 +3,7 @@ import { Lock, Unlock, Thermometer, Zap, RefreshCw } from "lucide-react"
 
 interface VehicleControlsProps {
   vin: string
-  doorsLocked: boolean
+  doorsLocked: boolean | null
   chargingState: string
   commandLoading: Record<string, boolean>
   onLockToggle: (vin: string, lock: boolean) => void
@@ -34,7 +34,7 @@ export function VehicleControls({
         disabled={commandLoading[lockCommandKey]}
         onClick={(e) => {
           e.stopPropagation()
-          onLockToggle(vin, !doorsLocked)
+          onLockToggle(vin, doorsLocked !== true)
         }}
       >
         {commandLoading[lockCommandKey] ? (
@@ -42,7 +42,7 @@ export function VehicleControls({
             <RefreshCw className="w-4 h-4 mr-1 animate-spin" />
             Processing...
           </>
-        ) : doorsLocked ? (
+        ) : doorsLocked === true ? (
           <>
             <Unlock className="w-4 h-4 mr-1" />
             Unlock

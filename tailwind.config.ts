@@ -1,29 +1,12 @@
 import type { Config } from "tailwindcss";
 
-const config: Config = {
+const config = {
   darkMode: "class",
   content: [
     "./pages/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
     "./app/**/*.{ts,tsx}",
     "./src/**/*.{ts,tsx}",
-  ],
-  safelist: [
-    // Vehicle card gradients
-    "from-success/5",
-    "from-info/5",
-    "from-warning/5",
-    "via-card",
-    "to-card",
-    "border-success/20",
-    "border-info/20",
-    "border-warning/20",
-    "bg-gradient-to-br",
-    // Toast backgrounds
-    "bg-success/10",
-    "bg-info/10",
-    "bg-warning/10",
-    "bg-destructive/10",
   ],
   theme: {
     extend: {
@@ -93,6 +76,6 @@ const config: Config = {
       },
     },
   },
-};
+} satisfies Config;
 
 export default config;

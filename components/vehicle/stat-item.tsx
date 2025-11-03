@@ -1,10 +1,11 @@
 import { LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { ReactNode } from "react"
 
 interface StatItemProps {
   icon: LucideIcon
   label: string
-  value: string | number
+  value: string | number | ReactNode
   iconColor?: string
   className?: string
 }

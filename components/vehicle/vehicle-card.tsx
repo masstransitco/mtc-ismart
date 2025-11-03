@@ -17,7 +17,6 @@ import {
   Clock,
   Lightbulb,
   MapPin,
-  AlertTriangle,
 } from "lucide-react"
 
 interface VehicleCardProps {
@@ -177,22 +176,6 @@ export function VehicleCard({
           </div>
         )}
 
-        {/* Warnings */}
-        {vehicle.battery_voltage && vehicle.battery_voltage < 12.2 && (
-          <div className="flex items-start gap-2 text-sm mb-3 p-2 bg-warning/10 border border-warning/20 rounded-md">
-            <AlertTriangle className="w-4 h-4 text-warning mt-0.5 flex-shrink-0" />
-            <div className="flex flex-col gap-1 text-xs">
-              <span className="text-warning">
-                Low 12V battery: {vehicle.battery_voltage.toFixed(1)}V
-              </span>
-              {vehicle.battery_voltage < 11.8 && (
-                <span className="text-warning">
-                  Warning: May not start. Consider charging soon.
-                </span>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Controls */}
         <VehicleControls
