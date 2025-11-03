@@ -14,13 +14,13 @@ A Next.js vehicle management system for monitoring and controlling MG iSmart ele
 
 - **Frontend**: Next.js 16, React 19, TypeScript
 - **UI Framework**: shadcn/ui with Radix UI primitives, Tailwind CSS
-- **Backend**: Next.js API Routes
+- **Backend**: Express.js Command API (port 8080)
 - **Database**: Supabase (PostgreSQL with Row Level Security)
 - **Message Broker**: Eclipse Mosquitto MQTT
-- **Vehicle Gateway**: SAIC Python MQTT Gateway (Docker)
+- **Vehicle Gateway**: SAIC Python MQTT Gateway
 - **Real-time**: Supabase Realtime subscriptions
 
-### System Components (Updated 2025-10-30)
+### System Components
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -34,14 +34,14 @@ A Next.js vehicle management system for monitoring and controlling MG iSmart ele
 │  Vercel          │    │  Supabase DB     │
 │  (Next.js App)   │◄───┤  (PostgreSQL)    │
 │  - Dashboard     │    │  - Realtime      │
-│  - API Routes    │    └──────────────────┘
+│  - API Proxy     │    └──────────────────┘
 └────────┬─────────┘
          │ HTTPS
          ▼
 ┌────────────────────────────────────────────┐
 │  Cloud Run (mtc-backend)                   │
 │  ┌──────────────────────────────────────┐  │
-│  │ HTTP API (port 8080)                 │  │
+│  │ Command API (port 8080)              │  │
 │  │ - /api/vehicle/lock                  │  │
 │  │ - /api/vehicle/climate               │  │
 │  │ - /api/vehicle/find                  │  │
@@ -51,6 +51,7 @@ A Next.js vehicle management system for monitoring and controlling MG iSmart ele
 │              ▼                              │
 │  ┌──────────────────────────────────────┐  │
 │  │ Mosquitto MQTT Broker                │  │
+│  │ - ACL-based access control           │  │
 │  └───────────┬──────────────────────────┘  │
 │              │                              │
 │         ┌────┴────┐                         │
@@ -66,387 +67,73 @@ A Next.js vehicle management system for monitoring and controlling MG iSmart ele
    MG iSmart API
 ```
 
----
+### Command System Architecture
 
-## Implementation Status
+For detailed command system documentation, including:
+- Lock/Unlock commands
+- Find My Car feature
+- Climate control
+- Charge control
+- MQTT topic structure
+- Authentication flow
+- Troubleshooting guide
 
-### ✅ Completed Features
-
-#### 1. Database Schema (Supabase)
-- **Tables Created**:
-  - `vehicles` - Master list of vehicles
-  - `vehicle_status` - Latest status snapshot (1 row per VIN)
-  - `vehicle_telemetry` - Historical time-series data
-  - `vehicle_commands` - Audit log of sent commands
-- **RLS Policies**: Configured for anonymous read access, service role write
-- **Functions**: `upsert_vehicle_status()` for efficient updates
-- **Indexes**: Optimized for queries on VIN, timestamp, event type
-
-#### 2. MQTT Infrastructure
-- **Mosquitto Broker**: Running on localhost:1883 (development mode)
-- **Configuration**:
-  - Development config without TLS (`mosquitto-dev.conf`)
-  - Anonymous access enabled for initial testing
-  - Production config available (`mosquitto.conf`) with TLS support
-- **SAIC Gateway**:
-  - ✅ Connected to MG iSmart API
-  - ✅ Authenticated with credentials: system@air.city
-  - ✅ Polling 5 vehicles (VINs: LSJWH4098PN070110, LSJWH409XPN070089, etc.)
-  - ✅ Publishing vehicle data to MQTT topics
-
-#### 3. Next.js Application
-- **API Routes**:
-  - `/api/vehicle/status` - Query vehicle status
-  - `/api/vehicle/lock` - Lock/unlock commands
-  - `/api/vehicle/climate` - Climate control
-  - `/api/vehicle/charge` - Charging control
-- **Components**:
-  - `VehicleDashboard` - Main dashboard with vehicle list
-  - shadcn/ui components (Button, Card, Badge, Toast, Tabs, etc.)
-  - Theme provider with dark mode support
-- **Hooks**:
-  - `useVehicle(vin)` - Real-time vehicle data for single vehicle
-  - `useVehicles()` - Real-time data for all vehicles with Supabase subscriptions
-- **Features**:
-  - Real-time updates via Supabase Realtime
-  - Vehicle control buttons (lock, climate, charge)
-  - Battery status, range, temperature display
-  - Timestamp formatting with relative time
-
-#### 4. MQTT Ingestion Service
-- **Location**: `server/ingest.ts`
-- **Functionality**:
-  - Subscribes to MQTT topics: `saic/+/vehicles/+/status/#`, `mg/+/status/#`
-  - Parses vehicle telemetry from MQTT messages
-  - Writes to Supabase using service role key
-  - Upserts vehicle_status for latest data
-  - Inserts vehicle_telemetry for historical records
-- **Status**: Code complete, requires manual start with `npm run ingest`
-
-#### 5. Docker Setup
-- **docker-compose.yml**: Orchestrates mosquitto + gateway
-- **Services Running**:
-  - `mtc-mqtt-broker` (eclipse-mosquitto:2) - Port 1883
-  - `mtc-ismart-gateway` (saicismartapi/saic-python-mqtt-gateway)
-- **Volumes**: Persistent data and logs
-- **Networks**: Isolated bridge network
-- **Health Checks**: Configured for both services
-
-#### 6. Environment Configuration
-- **Files**:
-  - `.env.local` - Supabase credentials, MQTT config for app
-  - `.env.mg` - iSmart API credentials for gateway
-  - `.env.example` - Template for new deployments
-- **Credentials Configured**:
-  - Supabase: URL, anon key, service role key
-  - iSmart: system@air.city / ac202303
-  - MQTT: localhost:1883 (anonymous for dev)
-
-#### 7. Build & Deployment
-- ✅ Next.js build successful (no errors)
-- ✅ TypeScript compilation passing
-- ✅ All routes generated correctly
-- ✅ Git repository initialized
-- ✅ All code committed and pushed to GitHub
-
----
-
-## Current State
-
-### What's Working Right Now
-
-1. **MQTT Broker**: Running and accepting connections on localhost:1883
-2. **SAIC Gateway**: Connected to iSmart API, polling 5 vehicles every 30 seconds
-3. **Database**: Schema deployed, tables created, RLS policies active
-4. **Dashboard**: Built and ready to display vehicles
-5. **API Routes**: Ready to receive commands and queries
-
-### What Needs to be Started
-
-1. **Ingestion Service**: Run `npm run ingest` to start writing vehicle data to database
-2. **Dev Server**: Run `npm run dev` to access dashboard at http://localhost:3000
-
----
-
-## Pending Tasks
-
-### Immediate (To See Vehicles in Dashboard)
-
-1. **Start Ingestion Service**
-   ```bash
-   npm run ingest
-   ```
-   - Will connect to MQTT and start writing vehicle data
-   - Should populate vehicle_status table within 30-60 seconds
-   - Monitor with: `tail -f /tmp/ingest.log`
-
-2. **Start Dashboard**
-   ```bash
-   npm run dev
-   ```
-   - Open http://localhost:3000
-   - Vehicles will appear as data is ingested
-
-3. **Populate Vehicle Metadata**
-   ```sql
-   -- Add friendly labels to vehicles
-   INSERT INTO vehicles (vin, label, model, year) VALUES
-   ('LSJWH4098PN070110', 'Vehicle 1', 'MG4 Electric', 2024),
-   ('LSJWH409XPN070089', 'Vehicle 2', 'MG4 Electric', 2024);
-   ```
-
-### Short-term Enhancements
-
-#### Security
-- [ ] Create MQTT user passwords (currently anonymous)
-  ```bash
-  cd docker/mosquitto/config
-  mosquitto_passwd -c passwd mg_gateway
-  mosquitto_passwd passwd mtc_app
-  mosquitto_passwd passwd mtc_ingest
-  ```
-- [ ] Update mosquitto config to require authentication
-- [ ] Restart mosquitto and update .env files with passwords
-
-#### Production Readiness
-- [ ] Generate TLS certificates for MQTT broker
-  - Use Let's Encrypt or Cloudflare Origin Certificates
-  - Update mosquitto.conf to use TLS listener on port 8883
-- [ ] Configure production domains:
-  - mqtt.masstransit.hk (MQTT broker)
-  - api.masstransit.hk (Next.js API)
-- [ ] Test AU endpoint if EU endpoint has issues
-  - Change SAIC_REST_URI in .env.mg
-  - Monitor gateway logs for authentication
-
-#### Dashboard Improvements
-- [ ] Add map view for vehicle locations
-  - Integrate Google Maps or Mapbox
-  - Show markers for each vehicle
-  - Display current position and route history
-- [ ] Add vehicle details modal
-  - Full telemetry display
-  - Command history
-  - Battery charge curve
-  - Location history timeline
-- [ ] Add filters and search
-  - Filter by charging state
-  - Search by VIN or label
-  - Sort by battery level, location, etc.
-- [ ] Add charts and analytics
-  - Battery level over time
-  - Charging sessions history
-  - Distance traveled
-  - Energy consumption
-
-#### Features
-- [ ] Implement authentication
-  - Add Supabase Auth
-  - Create login/signup pages
-  - Update RLS policies for authenticated users
-  - Add user management
-- [ ] Command scheduling
-  - Schedule climate pre-conditioning
-  - Schedule charging windows
-  - Recurring commands
-- [ ] Notifications
-  - Set up Firebase Cloud Messaging
-  - Alert on low battery
-  - Alert on charging complete
-  - Alert on vehicle movement
-  - Alert on doors unlocked
-- [ ] Multi-tenant support
-  - Associate vehicles with organizations
-  - Role-based access control
-  - Separate dashboards per tenant
-
-#### Integrations
-- [ ] ABRP (A Better Route Planner)
-  - Configure ABRP_USER_TOKEN in .env.mg
-  - Enable telemetry forwarding
-  - Add route planning links in dashboard
-- [ ] Home Assistant
-  - Already publishing HA discovery messages
-  - Document HA integration setup
-- [ ] OsmAnd/Traccar
-  - Configure OSMAND_SERVER_URI
-  - Enable fleet tracking integration
-
-#### Operations
-- [ ] Add logging and monitoring
-  - Structured logging with timestamps
-  - Error tracking with Sentry
-  - Performance monitoring
-  - MQTT message metrics
-- [ ] Add health check endpoints
-  - `/api/health` - Overall system health
-  - Check MQTT connection
-  - Check Supabase connection
-  - Check gateway status
-- [ ] Add backup and recovery
-  - Automated database backups
-  - MQTT message replay capability
-  - Disaster recovery procedures
-- [ ] Documentation
-  - API documentation
-  - Deployment guide
-  - Operations runbook
-  - Troubleshooting guide
-
----
-
-## Known Issues
-
-### Minor Issues
-
-1. **Punycode Deprecation Warning**
-   - Shows during build
-   - Coming from a dependency
-   - No impact on functionality
-   - Will be fixed when dependencies update
-
-2. **Multiple Lockfiles Warning**
-   - Next.js detects parent directory lockfile
-   - Can be silenced by setting `turbopack.root` in next.config.ts
-   - No functional impact
-
-### Resolved Issues
-
-- ✅ RLS policies blocking anon queries - Fixed with migration 002
-- ✅ MQTT URI scheme error - Changed from mqtt:// to tcp://
-- ✅ Docker image not found - Changed from ghcr.io to Docker Hub
-- ✅ Environment variables not loading - Added dotenv support
-
----
-
-## Development Workflow
-
-### Starting the System
-
-```bash
-# 1. Ensure Docker is running
-open -a Docker
-
-# 2. Start MQTT broker and gateway
-docker-compose up -d
-
-# 3. Start ingestion service (in one terminal)
-npm run ingest
-
-# 4. Start Next.js dev server (in another terminal)
-npm run dev
-
-# 5. Open dashboard
-open http://localhost:3000
-```
-
-### Monitoring Services
-
-```bash
-# Check Docker containers
-docker ps
-
-# View MQTT broker logs
-docker logs mtc-mqtt-broker --tail 50
-
-# View SAIC gateway logs
-docker logs mtc-ismart-gateway --tail 50
-
-# View ingestion service logs
-tail -f /tmp/ingest.log
-
-# Check database contents
-psql "$POSTGRES_URL_NON_POOLING" -c "SELECT vin, soc, range_km, updated_at FROM vehicle_status;"
-```
-
-### Making Changes
-
-```bash
-# 1. Make code changes
-# 2. Test locally
-npm run build  # Verify build works
-npm run dev    # Test in browser
-
-# 3. Commit changes
-git add -A
-git commit -m "Your commit message"
-git push
-```
-
----
-
-## Configuration Files
-
-### Key Files
-
-- `docker-compose.yml` - Docker services orchestration
-- `docker/mosquitto/config/mosquitto-dev.conf` - MQTT broker dev config
-- `docker/mosquitto/config/mosquitto.conf` - MQTT broker production config
-- `.env.local` - Next.js and ingestion service environment
-- `.env.mg` - SAIC gateway environment
-- `supabase/migrations/001_vehicle_schema.sql` - Database schema
-- `supabase/migrations/002_fix_rls_anon.sql` - RLS policy updates
-
-### Environment Variables
-
-#### .env.local (Next.js + Ingestion)
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://sssyxnpanayqvamstind.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGc...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
-POSTGRES_URL_NON_POOLING=postgres://...
-MQTT_BROKER_URL=mqtt://localhost:1883
-```
-
-#### .env.mg (SAIC Gateway)
-```bash
-MQTT_URI=tcp://mosquitto:1883
-SAIC_USER=system@air.city
-SAIC_PASSWORD=ac202303
-SAIC_REST_URI=https://gateway-mg-eu.soimt.com/api.app/v1/
-SAIC_REGION=eu
-```
+**See**: [`command-system.md`](/Users/markau/mtc-ismart/command-system.md)
 
 ---
 
 ## Database Schema
 
-### Tables
+### Key Tables
 
-#### vehicles
+#### `vehicles`
 Master list of vehicles
 ```sql
 vin TEXT PRIMARY KEY
-label TEXT                 -- Friendly name
-model TEXT                 -- Vehicle model
-year INTEGER              -- Manufacturing year
+label TEXT                    -- Friendly name
+model TEXT                    -- Vehicle model
+year INTEGER                  -- Manufacturing year
+plate_number TEXT             -- License plate
 created_at TIMESTAMPTZ
 updated_at TIMESTAMPTZ
 ```
 
-#### vehicle_status
+#### `vehicle_status`
 Latest status snapshot (1 row per VIN)
 ```sql
 vin TEXT PRIMARY KEY
-soc NUMERIC(5,2)          -- State of Charge %
-range_km NUMERIC          -- Estimated range
-charging_state TEXT       -- Idle|Charging|Complete
-lat, lon NUMERIC          -- GPS coordinates
+soc NUMERIC(5,2)             -- State of Charge %
+range_km NUMERIC             -- Estimated range
+charging_state TEXT          -- Idle|Charging|Complete
+lat, lon NUMERIC             -- GPS coordinates
 doors_locked BOOLEAN
+door_driver_open BOOLEAN
+door_passenger_open BOOLEAN
+door_rear_left_open BOOLEAN
+door_rear_right_open BOOLEAN
+bonnet_closed BOOLEAN
+boot_locked BOOLEAN
 interior_temp_c NUMERIC
+remote_temperature INTEGER  -- Target AC temp
 hvac_state TEXT
+heated_seat_front_left_level INTEGER
+heated_seat_front_right_level INTEGER
+rear_window_defrost BOOLEAN
+lights_main_beam BOOLEAN
+lights_dipped_beam BOOLEAN
+lights_side BOOLEAN
 ignition BOOLEAN
 odometer_km NUMERIC
 updated_at TIMESTAMPTZ
 ```
 
-#### vehicle_telemetry
+#### `vehicle_telemetry`
 Historical time-series data
 ```sql
 id BIGSERIAL PRIMARY KEY
 vin TEXT
 ts TIMESTAMPTZ
-event_type TEXT           -- charge|location|vehicle_state
+event_type TEXT              -- charge|location|vehicle_state
 soc NUMERIC(5,2)
 range_km NUMERIC
 charging_state TEXT
@@ -455,393 +142,52 @@ lat, lon NUMERIC
 raw_payload JSONB
 ```
 
-#### vehicle_commands
+#### `vehicle_commands`
 Command audit log
 ```sql
 id BIGSERIAL PRIMARY KEY
 vin TEXT
-command_type TEXT         -- lock|unlock|climate|charge
+command_type TEXT            -- lock|unlock|climate|charge|find
 command_payload JSONB
-status TEXT              -- pending|sent|success|failed
+status TEXT                  -- pending|sent|failed
 error_message TEXT
-requested_at TIMESTAMPTZ
+created_at TIMESTAMPTZ
 completed_at TIMESTAMPTZ
 ```
+
+#### `vehicle_events`
+Event log for all vehicle activities
+```sql
+id BIGSERIAL PRIMARY KEY
+vin TEXT REFERENCES vehicles(vin)
+event_type TEXT              -- command_sent|command_completed|command_failed|status_change|alert|system
+event_category TEXT          -- lock|climate|charge|find|telemetry|door|location
+event_title TEXT             -- Human-readable title
+event_description TEXT       -- Detailed description
+metadata JSONB               -- Additional event data
+severity TEXT                -- info|success|warning|error
+created_at TIMESTAMPTZ
+created_by TEXT              -- user_id or 'system'
+```
+Indexes: `vin`, `created_at`, `event_type`, `event_category`, `vin+created_at`
+
+Automatic triggers log:
+- Command events (sent, completed, failed) from `vehicle_commands`
+- Status changes (lock/unlock, climate, charging) from `vehicle_status`
+- Door alerts when doors open
 
 ---
 
 ## MQTT Topics
 
-### Published by Gateway (Status)
+### Status Topics (Published by Gateway)
 
-```
-saic/<user>/vehicles/<vin>/status/basic
-saic/<user>/vehicles/<vin>/status/charge
-saic/<user>/vehicles/<vin>/status/location
-saic/<user>/vehicles/<vin>/status/climate
-saic/<user>/vehicles/<vin>/events/vehicle_alarm
-```
-
-### Subscribed by Gateway (Commands)
-
-```
-saic/<user>/vehicles/<vin>/cmd/doors/locked/set
-saic/<user>/vehicles/<vin>/cmd/climate/remoteClimateState/set
-saic/<user>/vehicles/<vin>/cmd/drivetrain/charging/set
-saic/<user>/vehicles/<vin>/cmd/drivetrain/socTarget/set
-```
-
----
-
-## API Endpoints
-
-### GET /api/vehicle/status
-Get vehicle status
-- Query params: `?vin=LSJWH...` (optional)
-- Returns: Vehicle status with metadata
-
-### POST /api/vehicle/lock
-Lock or unlock vehicle
-```json
-{
-  "vin": "LSJWH4098PN070110",
-  "locked": true
-}
-```
-
-### POST /api/vehicle/climate
-Control climate
-```json
-{
-  "vin": "LSJWH4098PN070110",
-  "action": "on",
-  "temperature": 22
-}
-```
-Actions: `on`, `off`, `front`, `blowingonly`
-
-### POST /api/vehicle/charge
-Control charging
-```json
-{
-  "vin": "LSJWH4098PN070110",
-  "action": "start"
-}
-```
-Actions: `start`, `stop`, `setTarget`, `setLimit`
-
----
-
-## Troubleshooting
-
-### SAIC Gateway Not Connecting
-1. Check logs: `docker logs mtc-ismart-gateway`
-2. Verify credentials in .env.mg
-3. Try AU endpoint if EU fails
-4. Check if iSmart app works (session conflict)
-
-### No Vehicles in Dashboard
-1. Check if gateway is running: `docker ps`
-2. Verify gateway logs show vehicles
-3. Check if ingestion service is running: `ps aux | grep ingest`
-4. Query database directly to see if data exists
-
-### MQTT Connection Issues
-1. Check broker is running: `docker logs mtc-mqtt-broker`
-2. Test connection: `mosquitto_sub -h localhost -p 1883 -t '#' -v`
-3. Verify firewall not blocking port 1883
-
-### Build Errors
-1. Clean node_modules: `rm -rf node_modules && npm install`
-2. Clear Next.js cache: `rm -rf .next`
-3. Rebuild: `npm run build`
-
----
-
-## Resources
-
-- **SAIC Gateway**: https://github.com/SAIC-iSmart-API/saic-python-mqtt-gateway
-- **Supabase Docs**: https://supabase.com/docs
-- **Next.js Docs**: https://nextjs.org/docs
-- **Mosquitto Docs**: https://mosquitto.org/man/mosquitto-conf-5.html
-- **shadcn/ui**: https://ui.shadcn.com
-
----
-
-## Team
-
-**Project**: MTC iSmart Fleet Management
-**Started**: October 27, 2025
-**Repository**: https://github.com/masstransitco/mtc-ismart
-**Status**: Core system operational, ready for production deployment
-
----
-
-*Last Updated: October 27, 2025*
-
----
-
-## Recent Implementation Updates (2025-10-28)
-
-### 1. Door Security Status System ✅
-**Migration:** `003_add_door_columns.sql`
-
-Added granular door monitoring:
-- Individual door status (driver, passenger, rear-left, rear-right)
-- Bonnet/hood closed status
-- Boot lock status
-- Visual alerts for security issues
-
-**Key Fix:** Boolean parsing bug
-- **Issue:** MQTT gateway sends `"True"`/`"False"` (capitalized), code checked lowercase
-- **Solution:** Implemented case-insensitive `parseBoolean()` helper in `server/ingest.ts`
-- **Impact:** Lock/unlock commands now update correctly in database
-
-**UI Features:**
-- Orange alert box for open doors/hood/unlocked boot
-- "Locked & Secure" badge when all closed
-- Detailed door list when issues exist
-- Boot status de-emphasized (shown as small text)
-
-### 2. Light Status Indicators ✅
-**Migration:** `004_add_light_columns.sql`
-
-Tracks vehicle lighting:
-- `lights_main_beam` - High beam headlights
-- `lights_dipped_beam` - Low beam/dipped headlights
-- `lights_side` - Side/parking lights
-
-**UI Implementation:**
-- Small lightbulb icons appear below timestamp
-- Color-coded: Blue (bright)=high beam, Blue (light)=low beam, Gray=side lights
-- Only displayed when lights are ON (no clutter)
-- Hover tooltips for clarity
-
-### 3. Find My Car Feature ✅
-**API Endpoint:** `app/api/vehicle/find/route.ts`
-
-Four control modes:
-1. **activate** - Horn + lights (full alert)
-2. **lights_only** - Flash lights silently
-3. **horn_only** - Sound horn without lights
-4. **stop** - Cancel/stop alert
-
-**MQTT Topic:** `location/findMyCar/set`
-
-**UI:** Three dedicated buttons:
-- Find (MapPinned icon) - Full alert
-- Lights (Lightbulb icon) - Silent mode
-- Horn (Bell icon) - Horn only
-
-**Testing:** Verified with vehicle LSJWH4098PN070110, command successful
-
-### 4. Enhanced Climate Control ✅
-**Migration:** `005_add_climate_columns.sql`
-
-**New Data Fields:**
-- `remote_temperature` - Target AC temperature (integer, °C)
-- `heated_seat_front_left_level` - 0-3 heating level
-- `heated_seat_front_right_level` - 0-3 heating level
-- `rear_window_defrost` - Rear defroster on/off
-
-**Ingestion Updates:**
-- Captures `climate/remoteTemperature`
-- Captures `climate/heatedSeatsFrontLeftLevel`
-- Captures `climate/heatedSeatsFrontRightLevel`
-- Captures `climate/rearWindowDefrosterHeating` (on/off → boolean)
-
-**UI Enhancement:**
-- Temperature display shows: `25°C →22°` (current → target)
-- Blue thermometer icon when HVAC active (vs gray when off)
-- Real-time indication of climate control status
-- Visible at a glance which vehicles have AC running
-
-**Available Commands** (via existing API):
-- Start AC with temperature: `{action:"on", temperature:22}`
-- Stop AC: `{action:"off"}`
-- Blowing only: `{action:"blowingonly"}`
-- Front defrost: `{action:"front"}`
-
-### 5. Location Services ✅
-**Implementation:** `lib/geocoding.ts`
-
-- **Google Maps Reverse Geocoding** integration
-- API Key: `AIzaSyA8rDrxBzMRlgbA7BQ2DoY31gEXzZ4Ours`
-- Caches addresses by VIN in React state
-- Displays short address format on dashboard
-- Updates automatically when vehicle location changes
-
-**Display Format:**
-- Compact address in gray box with MapPin icon
-- Example: "123 Main St, City"
-- Loading state: "Loading location..."
-
-## Key Code Locations
-
-### Database
-- **Migrations:** `supabase/migrations/`
-  - `001_initial_schema.sql` - Base tables
-  - `002_add_upsert_function.sql` - Stored procedure
-  - `003_add_door_columns.sql` - Door status
-  - `004_add_light_columns.sql` - Light indicators
-  - `005_add_climate_columns.sql` - Climate control
-
-### Backend
-- **Ingestion Service:** `server/ingest.ts`
-  - MQTT subscription handler
-  - Data caching (5-second flush)
-  - Boolean parsing: Line 111-114
-  - Topic mapping: Lines 117-187
-- **MQTT Client:** `server/mqtt-client.ts`
-  - Connection management
-  - Command publishing
-- **API Routes:** `app/api/vehicle/`
-  - `lock/route.ts` - Door lock/unlock
-  - `climate/route.ts` - HVAC control
-  - `charge/route.ts` - Charging control
-  - `find/route.ts` - Find My Car
-  - `status/route.ts` - Status retrieval
-
-### Frontend
-- **Main Dashboard:** `components/vehicle-dashboard.tsx`
-  - Vehicle list with cards
-  - Real-time updates
-  - Control buttons
-  - Status displays
-- **Hooks:** `hooks/use-vehicle.ts`
-  - `useVehicles()` - All vehicles
-  - `useVehicle(vin)` - Single vehicle
-  - TypeScript interfaces
-
-### Configuration
-- **Environment:** `.env.local`
-- **Supabase Client:** `lib/supabase.ts`
-- **Geocoding:** `lib/geocoding.ts`
-
-## Data Flow Examples
-
-### Lock Command Flow
-```
-User clicks Lock → 
-  POST /api/vehicle/lock {vin, locked:true} →
-    Log to vehicle_commands table →
-    Publish MQTT: saic/user/vehicles/VIN/doors/locked/set "true" →
-      SAIC Gateway receives →
-        Sends to vehicle →
-          Vehicle locks →
-            Gateway publishes status →
-              Ingestion service receives →
-                Updates vehicle_status.doors_locked = true →
-                  Supabase real-time notifies →
-                    Dashboard updates button to "Unlock"
-```
-
-### Climate Control Flow
-```
-User starts AC →
-  POST /api/vehicle/climate {vin, action:"on", temperature:22} →
-    Publish climate/remoteClimateState/set "on" →
-    Publish climate/remoteTemperature/set "22" →
-      Gateway sends to vehicle →
-        AC starts →
-          Gateway publishes status →
-            Ingestion captures hvac_state="on", remote_temperature=22 →
-              Dashboard shows: Blue thermometer + "25°C →22°"
-```
-
-### Real-time Updates Flow
-```
-Vehicle state changes →
-  SAIC API →
-    Python Gateway →
-      MQTT topic publish →
-        Ingestion service receives →
-          Cache update (in-memory) →
-            5-second flush timer →
-              upsert_vehicle_status() →
-                PostgreSQL UPDATE →
-                  pg_notify trigger →
-                    Supabase real-time channel →
-                      React useVehicles hook →
-                        setState update →
-                          Dashboard re-renders
-```
-
-## Testing Commands
-
-### Door Lock/Unlock
-```bash
-# Lock
-curl -X POST http://localhost:3000/api/vehicle/lock \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","locked":true}'
-
-# Unlock
-curl -X POST http://localhost:3000/api/vehicle/lock \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","locked":false}'
-```
-
-### Climate Control
-```bash
-# Start AC at 22°C
-curl -X POST http://localhost:3000/api/vehicle/climate \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","action":"on","temperature":22}'
-
-# Stop AC
-curl -X POST http://localhost:3000/api/vehicle/climate \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","action":"off"}'
-
-# Front defrost
-curl -X POST http://localhost:3000/api/vehicle/climate \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","action":"front"}'
-```
-
-### Find My Car
-```bash
-# Horn + Lights
-curl -X POST http://localhost:3000/api/vehicle/find \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","mode":"activate"}'
-
-# Lights only (silent)
-curl -X POST http://localhost:3000/api/vehicle/find \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","mode":"lights_only"}'
-
-# Stop alert
-curl -X POST http://localhost:3000/api/vehicle/find \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","mode":"stop"}'
-```
-
-### Charge Control
-```bash
-# Start charging
-curl -X POST http://localhost:3000/api/vehicle/charge \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","action":"start"}'
-
-# Stop charging
-curl -X POST http://localhost:3000/api/vehicle/charge \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","action":"stop"}'
-```
-
-## MQTT Topic Reference
-
-### Status Topics (Read-only)
 ```
 saic/<user>/vehicles/<vin>/drivetrain/soc
 saic/<user>/vehicles/<vin>/drivetrain/range
 saic/<user>/vehicles/<vin>/drivetrain/charging
-saic/<user>/vehicles/<vin>/drivetrain/power
 saic/<user>/vehicles/<vin>/location/latitude
 saic/<user>/vehicles/<vin>/location/longitude
-saic/<user>/vehicles/<vin>/location/speed
 saic/<user>/vehicles/<vin>/doors/locked
 saic/<user>/vehicles/<vin>/doors/driver
 saic/<user>/vehicles/<vin>/doors/passenger
@@ -850,7 +196,6 @@ saic/<user>/vehicles/<vin>/doors/rearRight
 saic/<user>/vehicles/<vin>/doors/bonnet
 saic/<user>/vehicles/<vin>/doors/boot
 saic/<user>/vehicles/<vin>/climate/interiorTemperature
-saic/<user>/vehicles/<vin>/climate/exteriorTemperature
 saic/<user>/vehicles/<vin>/climate/remoteTemperature
 saic/<user>/vehicles/<vin>/climate/remoteClimateState
 saic/<user>/vehicles/<vin>/climate/heatedSeatsFrontLeftLevel
@@ -861,7 +206,8 @@ saic/<user>/vehicles/<vin>/lights/dippedBeam
 saic/<user>/vehicles/<vin>/lights/side
 ```
 
-### Command Topics (Write)
+### Command Topics (Subscribed by Gateway)
+
 ```
 saic/<user>/vehicles/<vin>/doors/locked/set [true|false]
 saic/<user>/vehicles/<vin>/climate/remoteClimateState/set [on|off|front|blowingonly]
@@ -871,742 +217,383 @@ saic/<user>/vehicles/<vin>/charging/start/set
 saic/<user>/vehicles/<vin>/charging/stop/set
 ```
 
-### Result Topics
-```
-saic/<user>/vehicles/<vin>/doors/locked/result [Success|Error]
-saic/<user>/vehicles/<vin>/climate/remoteClimateState/result [Success|Error]
-saic/<user>/vehicles/<vin>/location/findMyCar/result [Success|Error]
-```
-
-## Debugging & Monitoring
-
-### View Live MQTT Messages
-```bash
-# All topics
-docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/#' -v
-
-# Specific vehicle
-docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/+/vehicles/LSJWH4098PN070110/#' -v
-
-# Climate only
-docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/+/vehicles/+/climate/#' -v
-
-# Doors only
-docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/+/vehicles/+/doors/#' -v
-```
-
-### Check Ingestion Service
-```bash
-# View logs
-tail -f /tmp/ingest-new.log
-
-# Filter for errors
-grep -i error /tmp/ingest-new.log
-
-# Filter for specific vehicle
-grep LSJWH4098PN070110 /tmp/ingest-new.log
-
-# Check if processing climate data
-grep -i climate /tmp/ingest-new.log | tail -20
-```
-
-### Database Queries
-```sql
--- Check vehicle status
-SELECT vin, 
-       doors_locked, 
-       hvac_state, 
-       interior_temp_c, 
-       remote_temperature,
-       lights_main_beam,
-       updated_at
-FROM vehicle_status
-ORDER BY updated_at DESC;
-
--- View recent commands
-SELECT id, vin, command_type, status, created_at
-FROM vehicle_commands
-ORDER BY created_at DESC
-LIMIT 20;
-
--- Check telemetry history
-SELECT vin, event_type, soc, lat, lon, created_at
-FROM vehicle_telemetry
-WHERE vin = 'LSJWH4098PN070110'
-ORDER BY created_at DESC
-LIMIT 50;
-
--- Door status for all vehicles
-SELECT vin,
-       doors_locked,
-       door_driver_open,
-       door_passenger_open,
-       door_rear_left_open,
-       door_rear_right_open,
-       bonnet_closed,
-       boot_locked
-FROM vehicle_status;
-```
-
-## Known Limitations
-
-### SAIC API Constraints
-1. **Boot Lock:** Can only UNLOCK, not lock remotely
-2. **AC Temperature:** Integer values only (17-33°C typical range)
-3. **Heated Seats:** Level range varies by model (0-3 or 0-1)
-4. **Command Rate:** Recommend max 1 command per 5 seconds per vehicle
-5. **Fan Speed:** Not controllable via API (auto-managed by vehicle)
-
-### Current System Limitations
-1. **No command feedback:** API returns success, but doesn't wait for vehicle confirmation
-2. **No command queue:** Multiple rapid commands may conflict
-3. **No user authentication:** Single-user system currently
-4. **No historical charts:** Telemetry stored but not visualized
-5. **No notifications:** No push alerts for events
-
-## Performance Metrics
-
-### Typical Values (5 vehicles)
-- **MQTT messages received:** ~50-100/minute
-- **Database writes:** ~12/minute (every 5 seconds per vehicle)
-- **Dashboard update latency:** <100ms via Supabase real-time
-- **Command execution time:** 2-5 seconds (network + vehicle response)
-- **Geocoding API calls:** Minimal (cached per VIN)
-
-### Resource Usage
-- **Ingestion service:** ~30MB RAM, minimal CPU
-- **Next.js dev server:** ~200MB RAM
-- **MQTT broker:** ~10MB RAM
-- **Database:** Growing ~1MB/day with 5 vehicles
-
-## Deployment Checklist
-
-### Production Setup
-- [ ] Update environment variables in hosting platform
-- [ ] Enable Supabase connection pooling
-- [ ] Set up SSL/TLS for MQTT broker
-- [ ] Configure proper CORS settings
-- [ ] Enable rate limiting on API routes
-- [ ] Set up monitoring (Sentry, LogRocket, etc.)
-- [ ] Configure automated backups
-- [ ] Set up CI/CD pipeline
-- [ ] Enable error logging
-- [ ] Configure auto-restart for ingestion service
-
-### Security Hardening
-- [ ] Rotate all API keys
-- [ ] Implement user authentication
-- [ ] Enable Supabase RLS policies
-- [ ] Use secret management service
-- [ ] Enable HTTPS only
-- [ ] Implement API rate limiting
-- [ ] Add CSRF protection
-- [ ] Sanitize all user inputs
-- [ ] Enable audit logging
-- [ ] Configure firewall rules
-
 ---
 
----
+## API Endpoints
 
-## Production Deployment (2025-10-28)
+### Command API (Express.js - Port 8080)
 
-### 🎯 Deployment Architecture
+**Base URL**: https://mtc-backend.run.app
 
-The system is now deployed to production using a distributed cloud architecture:
-
-```
-Internet
-  ↓
-┌──────────────────────────────────────────────────────────┐
-│ Cloudflare (DNS + SSL + CDN)                             │
-│  ├─ mtc.air.zone → Vercel                                │
-│  └─ mqtt.air.zone → Cloudflare Tunnel → Cloud Run        │
-└──────────────────────────────────────────────────────────┘
-  ↓                                   ↓
-┌──────────────────────┐      ┌─────────────────────────────┐
-│ Vercel (Dashboard)   │      │ Google Cloud Run (Backend)  │
-│ ─────────────────    │      │ ────────────────────────    │
-│ Next.js 16 App       │      │ Ubuntu 24.04 Container      │
-│ React 19 Frontend    │      │  ├─ Mosquitto MQTT:1883     │
-│ Real-time UI         │      │  ├─ SAIC Python Gateway     │
-│ API Routes           │      │  └─ Node.js Ingestion       │
-└──────────┬───────────┘      └─────────────┬───────────────┘
-           │                                 │
-           └─────────────┬───────────────────┘
-                         ↓
-                  ┌──────────────┐
-                  │ Supabase DB  │
-                  │ PostgreSQL   │
-                  │ Realtime     │
-                  └──────────────┘
-```
-
-### 📦 Deployed Components
-
-#### 1. Google Cloud Run (Backend - MQTT + Ingestion)
-- **Service Name**: `mtc-backend`
-- **URL**: https://mtc-backend-880316754524.asia-east1.run.app
-- **Region**: asia-east1 (Hong Kong)
-- **Project**: cityos-392102
-- **Resources**:
-  - Memory: 2GB
-  - CPU: 2 vCPU
-  - Min Instances: 1
-  - Max Instances: 3
-  - Timeout: 3600s (1 hour)
-  - No CPU throttling (always-on)
-- **Container**:
-  - Base Image: ubuntu:24.04
-  - Services: Supervisor managing 3 processes
-    1. Mosquitto MQTT Broker (port 1883)
-    2. SAIC Python Gateway (connects to MG iSmart API)
-    3. Node.js Ingestion Service (writes to Supabase)
-- **Artifact Registry**: asia-east1-docker.pkg.dev/cityos-392102/mtc-containers/mtc-backend:latest
-
-#### 2. Vercel (Dashboard)
-- **Production URL**: https://mtc.air.zone
-- **Preview URL**: https://mtc-ismart-pynyxof9m-masstransitcos-projects.vercel.app
-- **Framework**: Next.js 16.0.0
-- **Region**: Hong Kong (hkg1)
-- **Deployment**: Automatic from GitHub main branch
-- **Environment Variables**:
-  - `NEXT_PUBLIC_SUPABASE_URL`
-  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - `SUPABASE_SERVICE_ROLE_KEY`
-  - `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`
-  - `MQTT_BROKER_URL=mqtt://mqtt.air.zone:1883`
-  - `SAIC_USER=system@air.city`
-
-#### 3. Cloudflare Tunnel (MQTT Access)
-- **Tunnel Name**: mtc-mqtt
-- **Tunnel ID**: 78bb8393-ab8f-4605-b763-5c653bf93540
-- **Credentials**: /Users/markau/.cloudflared/78bb8393-ab8f-4605-b763-5c653bf93540.json
-- **Configuration**: ~/.cloudflared/config.yml
-- **Ingress**:
-  - mqtt.air.zone → https://mtc-backend-880316754524.asia-east1.run.app
-- **Status**: Running locally (needs to be installed as service)
-
-#### 4. DNS Configuration (Cloudflare)
-Domain: `air.zone`
-- **CNAME Record**: `mqtt` → `78bb8393-ab8f-4605-b763-5c653bf93540.cfargotunnel.com` (Proxied)
-- **CNAME Record**: `mtc` → `cname.vercel-dns.com` (Proxied)
-
-### 🔧 Deployment Files
-
-#### Cloud Build Configuration
-**File**: `cloudbuild.yaml`
-```yaml
-steps:
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'build'
-      - '-f'
-      - 'docker/cloud-run/Dockerfile.all-in-one'
-      - '-t'
-      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:latest'
-      - '-t'
-      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:$BUILD_ID'
-      - '.'
-images:
-  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:latest'
-  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:$BUILD_ID'
-timeout: 1200s
-```
-
-#### Production Dockerfile
-**File**: `docker/cloud-run/Dockerfile.all-in-one`
-- Base: ubuntu:24.04
-- Installs: mosquitto, python3, nodejs, npm, supervisor
-- Python Gateway: saic-ismart-client-ng
-- Copies: server/, lib/, hooks/, package.json
-- Config: mosquitto-cloud.conf, supervisord.conf
-- Exposes: Port 1883 (MQTT)
-- Health Check: mosquitto_sub test every 30s
-
-#### Cloud Ignore
-**File**: `.gcloudignore`
-- Excludes: node_modules/, .next/, .env.*, documentation, IDE files
-- Includes: Server code, Docker configs, package.json
-
-#### Vercel Configuration
-**File**: `vercel.json`
+#### `POST /api/vehicle/lock`
+Lock or unlock vehicle
 ```json
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": ".next",
-  "framework": "nextjs",
-  "regions": ["hkg1"]
+  "vin": "LSJWH4098PN070110",
+  "locked": true
 }
 ```
-Note: Environment variables managed via Vercel Dashboard (not in vercel.json)
 
-### 🚀 Deployment Commands
-
-#### Deploy to Cloud Run
-```bash
-# Build with Cloud Build
-gcloud builds submit --config cloudbuild.yaml
-
-# Deploy to Cloud Run
-gcloud run deploy mtc-backend \
-  --image=asia-east1-docker.pkg.dev/cityos-392102/mtc-containers/mtc-backend:latest \
-  --platform=managed \
-  --region=asia-east1 \
-  --allow-unauthenticated \
-  --memory=2Gi \
-  --cpu=2 \
-  --port=1883 \
-  --min-instances=1 \
-  --max-instances=3 \
-  --timeout=3600 \
-  --no-cpu-throttling \
-  --set-env-vars="MQTT_URI=tcp://localhost:1883,SAIC_USER=system@air.city,..."
+#### `POST /api/vehicle/find`
+Find My Car (horn, lights, or both)
+```json
+{
+  "vin": "LSJWH4098PN070110",
+  "mode": "activate"  // activate|lights_only|horn_only|stop
+}
 ```
 
-#### Deploy to Vercel
+#### `POST /api/vehicle/climate`
+Control climate
+```json
+{
+  "vin": "LSJWH4098PN070110",
+  "action": "on",
+  "temperature": 22
+}
+```
+Actions: `on`, `off`, `front`, `blowingonly`
+
+#### `POST /api/vehicle/charge`
+Control charging
+```json
+{
+  "vin": "LSJWH4098PN070110",
+  "action": "start"
+}
+```
+Actions: `start`, `stop`
+
+---
+
+## Deployment
+
+### Production Setup
+
+#### Cloud Run (Backend)
+- **Service**: mtc-backend
+- **Region**: asia-east1 (Hong Kong)
+- **URL**: https://mtc-backend.run.app
+- **Container**: Ubuntu 24.04 with Supervisor
+- **Services**:
+  1. Mosquitto MQTT Broker (localhost:1883)
+  2. SAIC Python Gateway
+  3. Node.js Ingestion Service
+  4. Express.js Command API (port 8080)
+- **Resources**: 2GB RAM, 2 vCPU, min-instances=1
+
+#### Vercel (Frontend)
+- **URL**: https://mtc.air.zone
+- **Region**: Hong Kong (hkg1)
+- **Deployment**: Automatic from GitHub main branch
+
+#### Supabase
+- **URL**: https://sssyxnpanayqvamstind.supabase.co
+- **Database**: PostgreSQL with Realtime
+- **Connection**: Pooler URL for direct access
+
+### Environment Variables
+
+#### Command API (Cloud Run)
 ```bash
-# Production deployment (automatic via GitHub)
-git push origin main
-
-# Manual deployment
-npx vercel deploy --prod
-
-# Add custom domain
-npx vercel domains add mtc.air.zone
+MQTT_BROKER_URL=mqtt://localhost:1883
+MQTT_USERNAME=mtc_app
+MQTT_PASSWORD=
+SAIC_USER=system@air.city
+NEXT_PUBLIC_SUPABASE_URL=https://...
+SUPABASE_SERVICE_ROLE_KEY=...
+PORT=8080
 ```
 
-#### Setup Cloudflare Tunnel
+#### SAIC Gateway (Cloud Run)
 ```bash
-# Create tunnel
-cloudflared tunnel create mtc-mqtt
-
-# Configure tunnel
-cat > ~/.cloudflared/config.yml << EOF
-tunnel: 78bb8393-ab8f-4605-b763-5c653bf93540
-credentials-file: /Users/markau/.cloudflared/78bb8393-ab8f-4605-b763-5c653bf93540.json
-ingress:
-  - hostname: mqtt.air.zone
-    service: https://mtc-backend-880316754524.asia-east1.run.app
-  - service: http_status:404
-EOF
-
-# Run tunnel
-cloudflared tunnel run mtc-mqtt
-
-# Install as service (macOS)
-sudo cloudflared service install
-
-# Install as service (Linux)
-sudo cloudflared service install --legacy
+MQTT_URI=tcp://localhost:1883
+MQTT_USER=mg_gateway
+MQTT_PASSWORD=
+SAIC_USER=system@air.city
+SAIC_PASSWORD=ac202303
+SAIC_REST_URI=https://gateway-mg-eu.soimt.com/api.app/v1/
+ACTIVE_QUERY_INTERVAL=5
+SLEEP_QUERY_INTERVAL=5
+INACTIVE_QUERY_INTERVAL=5
 ```
 
-### 📊 Production Monitoring
-
-#### View Cloud Run Logs
+#### Ingestion Service (Cloud Run)
 ```bash
-# Real-time logs
-gcloud run logs tail mtc-backend --region=asia-east1
-
-# Filter for specific service
-gcloud run logs tail mtc-backend --region=asia-east1 | grep gateway
-gcloud run logs tail mtc-backend --region=asia-east1 | grep ingest
-gcloud run logs tail mtc-backend --region=asia-east1 | grep mosquitto
-
-# View specific time range
-gcloud run logs read mtc-backend --region=asia-east1 --limit=100
+MQTT_BROKER_URL=mqtt://localhost:1883
+MQTT_USERNAME=mtc_ingest
+MQTT_PASSWORD=
+SAIC_USER=system@air.city
+NEXT_PUBLIC_SUPABASE_URL=https://...
+SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-#### Check Service Status
+#### Frontend (Vercel)
 ```bash
-# Cloud Run service info
-gcloud run services describe mtc-backend --region=asia-east1
-
-# Vercel deployments
-npx vercel ls mtc-ismart
-
-# Cloudflare tunnel info
-cloudflared tunnel info mtc-mqtt
-```
-
-#### Test Production Endpoints
-```bash
-# Dashboard
-curl -I https://mtc.air.zone
-
-# MQTT tunnel (via Cloudflare)
-curl -I https://mqtt.air.zone
-
-# Cloud Run direct
-curl -I https://mtc-backend-880316754524.asia-east1.run.app
-```
-
-### ⚙️ Environment Variables
-
-#### Cloud Run Environment Variables
-Set via `--set-env-vars` flag:
-- `MQTT_URI=tcp://localhost:1883`
-- `SAIC_USER=system@air.city`
-- `SAIC_PASSWORD=ac202303`
-- `SAIC_REST_URI=https://gateway-mg-eu.soimt.com/api.app/v1/`
-- `SAIC_REGION=eu`
-- `SAIC_TENANT_ID=459771`
-- `NEXT_PUBLIC_SUPABASE_URL=https://sssyxnpanayqvamstind.supabase.co`
-- `SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...`
-- `MQTT_BROKER_URL=mqtt://localhost:1883`
-- `NODE_ENV=production`
-
-#### Vercel Environment Variables
-Set via Vercel Dashboard or CLI:
-- `NEXT_PUBLIC_SUPABASE_URL` (Production)
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` (Production)
-- `SUPABASE_SERVICE_ROLE_KEY` (Production)
-- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (Production)
-- `MQTT_BROKER_URL=mqtt://mqtt.air.zone:1883` (Production)
-- `SAIC_USER=system@air.city` (Production)
-
-### 🔒 Security Notes
-
-#### Access Control
-- Cloud Run: Unauthenticated access (public)
-- Vercel: Public dashboard
-- MQTT: Currently anonymous (TODO: Add authentication)
-- Supabase: Row Level Security enabled
-
-#### Secrets Management
-- Cloud Run: Environment variables (encrypted at rest)
-- Vercel: Environment variables (encrypted)
-- Cloudflare: Tunnel credentials file (local)
-- **TODO**: Migrate to Google Secret Manager
-
-#### SSL/TLS
-- ✅ Dashboard: Cloudflare SSL/TLS (Full)
-- ✅ MQTT Tunnel: Cloudflare SSL termination
-- ⚠️ MQTT Protocol: Currently unencrypted internally
-- **TODO**: Enable MQTT TLS on broker (port 8883)
-
-### 💰 Cost Estimation
-
-Monthly costs (estimated):
-- **Google Cloud Run**: $10-15 (with free tier)
-  - 2GB RAM × 1-3 instances × 730 hours
-  - Free tier: 2M requests, 360K GB-seconds
-- **Vercel**: Free (Hobby plan)
-  - 100GB bandwidth included
-  - Hong Kong edge functions
-- **Cloudflare**: Free
-  - DNS + CDN
-  - Tunnel service
-- **Supabase**: Free (with usage limits)
-  - 500MB database
-  - 1GB file storage
-  - 2GB bandwidth
-- **Total**: ~$10-15/month (or less with free tiers)
-
-### 🐛 Troubleshooting Production
-
-#### Dashboard Not Loading
-1. Check Vercel deployment status: `npx vercel ls`
-2. Check DNS: `dig mtc.air.zone`
-3. Check browser console for errors
-4. Verify environment variables in Vercel dashboard
-
-#### MQTT Connection Failed
-1. Check Cloudflare Tunnel: `ps aux | grep cloudflared`
-2. Test DNS: `dig mqtt.air.zone`
-3. Check Cloud Run logs: `gcloud run logs tail mtc-backend`
-4. Verify tunnel config: `cat ~/.cloudflared/config.yml`
-
-#### No Vehicle Data
-1. Check Cloud Run is running: `gcloud run services describe mtc-backend`
-2. View ingestion logs: `gcloud run logs tail mtc-backend | grep ingest`
-3. Check Supabase connection
-4. Verify SAIC gateway credentials
-
-#### Cloudflare Tunnel Down
-```bash
-# Check if running
-ps aux | grep cloudflared
-
-# Restart tunnel
-cloudflared tunnel run mtc-mqtt &
-
-# Install as permanent service
-sudo cloudflared service install
-```
-
-### 📋 Production Checklist
-
-#### ✅ Completed
-- [x] Cloud Run backend deployed
-- [x] Docker image built and pushed to Artifact Registry
-- [x] Vercel dashboard deployed
-- [x] Custom domain configured (mtc.air.zone)
-- [x] Cloudflare Tunnel created and running
-- [x] DNS records configured
-- [x] Environment variables set
-- [x] Supabase database connected
-- [x] SAIC gateway connected to iSmart API
-- [x] Real-time updates working
-
-#### ⚠️ Pending
-- [ ] Install Cloudflare Tunnel as permanent service
-- [ ] Enable MQTT authentication (username/password)
-- [ ] Configure MQTT TLS/SSL (port 8883)
-- [ ] Set up Cloud Run auto-scaling rules
-- [ ] Configure Vercel production environment variables for all environments
-- [ ] Enable Google Cloud monitoring/alerting
-- [ ] Set up automated backups for Supabase
-- [ ] Add error tracking (Sentry/LogRocket)
-- [ ] Configure rate limiting
-- [ ] Implement user authentication
-- [ ] Add health check endpoints
-- [ ] Document disaster recovery procedures
-
-### 🔄 Update Procedures
-
-#### Deploy Code Changes
-```bash
-# 1. Make changes locally
-# 2. Test locally
-npm run build
-npm run dev
-
-# 3. Commit and push
-git add -A
-git commit -m "Your changes"
-git push origin main
-
-# 4. Cloud Run auto-deploys via Cloud Build
-# 5. Vercel auto-deploys from GitHub
-# 6. Monitor deployments
-npx vercel ls
-gcloud run services describe mtc-backend
-```
-
-#### Update Environment Variables
-```bash
-# Vercel
-npx vercel env add VARIABLE_NAME production
-
-# Cloud Run (requires redeployment)
-gcloud run deploy mtc-backend \
-  --update-env-vars="NEW_VAR=value"
-```
-
-#### Roll Back Deployment
-```bash
-# Vercel - redeploy previous version
-npx vercel rollback
-
-# Cloud Run - deploy previous image
-gcloud run deploy mtc-backend \
-  --image=asia-east1-docker.pkg.dev/cityos-392102/mtc-containers/mtc-backend:PREVIOUS_BUILD_ID
+NEXT_PUBLIC_SUPABASE_URL=https://...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyA8rDrxBzMRlgbA7BQ2DoY31gEXzZ4Ours
+NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID=fac8d0a4b514e481e907fa98
+BACKEND_API_URL=https://mtc-backend-880316754524.asia-east1.run.app
 ```
 
 ---
 
-## MQTT Connection Fix (2025-10-30)
+## Key Features
 
-### Problem Summary
+### Implemented & Working
 
-Vehicle commands (lock/unlock, find, lights, horn) were experiencing timeout errors with the following console output:
-```
-[MQTT] Connection error: Error: connack timeout
-[MQTT] Connection closed
-[MQTT] Reconnecting...
-POST /api/vehicle/lock 200 in 24.5s
-POST /api/vehicle/lock 200 in 53s
-```
+- ✅ **Lock/Unlock**: Remote door lock control
+- ✅ **Find My Car**: Horn and lights activation (4 modes)
+- ✅ **Climate Control**: Remote HVAC management with temperature control
+- ✅ **Charge Control**: Start/stop charging
+- ✅ **Real-time Dashboard**: Live vehicle status updates
+- ✅ **Location Services**: Google Maps reverse geocoding
+- ✅ **Door Status**: Individual door/bonnet/boot monitoring
+- ✅ **Light Status**: Main beam, dipped beam, side lights
+- ✅ **Seat Heating**: Front left/right heated seat levels
+- ✅ **Command Logging**: Full audit trail in database
+- ✅ **MQTT ACL Security**: User-based access control
+- ✅ **Multi-vehicle Support**: Manage multiple vehicles
+- ✅ **Interactive Map View**: Google Maps with vehicle markers and real-time locations
+- ✅ **Event Logs**: Comprehensive event tracking with filtering and real-time updates
+- ✅ **Dark Mode**: Full dark mode support across all views
 
-**Root Cause:**
-- Vercel serverless functions were attempting to establish MQTT connections directly
-- Cloudflare Tunnel only supports HTTP/HTTPS traffic, not raw MQTT TCP connections
-- MQTT client connections don't work reliably in serverless environments due to connection pooling and cold starts
+### Dashboard Features
 
-### Solution Implemented
+#### Cars View
+- Real-time vehicle data with Supabase subscriptions
+- Battery status, range, temperature display
+- Door/lock security alerts
+- Light indicators
+- Climate control status with target temperature
+- Location display with street address
+- Control buttons for lock, climate, find, charge
+- Timestamp formatting with relative time
+- License plate display as primary identifier
 
-Created an HTTP API proxy layer on the Cloud Run backend that accepts HTTP requests and forwards them to the local MQTT broker.
+#### Map View
+- Google Maps integration with vector tiles
+- 3D map with tilt (45°) and rotation controls
+- Interactive vehicle markers color-coded by battery level:
+  - Green: SOC ≥ 80%
+  - Yellow: SOC ≥ 50%
+  - Orange: SOC ≥ 20%
+  - Red: SOC < 20%
+- Click markers to view vehicle details (battery, range, temperature, lock status)
+- Auto-centering and zoom based on vehicle locations
+- Pan, zoom, tilt, and rotate gestures enabled
+- Full dark mode support with theme-responsive map tiles
+- License plate displayed in InfoWindow popups
 
-**New Architecture Flow:**
-```
-Vercel API Route → HTTPS POST → Cloud Run HTTP API (port 8080)
-  → MQTT publish (localhost:1883) → SAIC Gateway → Vehicle
-```
+#### Logs View
+- Real-time event log viewer with Supabase subscriptions
+- Event categories: command, status_change, alert, system
+- Event types: lock, climate, charge, find, telemetry, door, location
+- Severity levels: info, success, warning, error
+- Filter by vehicle, category, and severity
+- Rich metadata display for each event
+- Relative timestamps (e.g., "5m ago") and absolute timestamps
+- Automatic event logging via database triggers:
+  - Command events (sent, completed, failed)
+  - Status changes (lock/unlock, climate, charging)
+  - Door open alerts
 
-### Changes Made
+### UI/UX Features
+- Tabbed navigation: Cars, Map, Logs
+- Responsive design (mobile, tablet, desktop)
+- Dark mode with automatic theme detection
+- Smooth transitions and animations
+- Real-time updates across all views
 
-#### 1. Backend (Cloud Run)
+---
 
-**New File: `server/command-api.ts`**
-- Express HTTP server listening on port 8080
-- Endpoints for all vehicle commands:
-  - `POST /api/vehicle/lock` - Lock/unlock vehicle
-  - `POST /api/vehicle/climate` - Climate control (on/off/front/blowingonly)
-  - `POST /api/vehicle/find` - Find My Car (activate/lights_only/horn_only/stop)
-  - `POST /api/vehicle/charge` - Charging control (start/stop/setTarget)
-- Connects to local MQTT broker at `mqtt://localhost:1883`
-- Logs all commands to Supabase `vehicle_commands` table
-- Returns JSON responses with success status and command IDs
+## Development Workflow
 
-**Modified: `docker/cloud-run/supervisord.conf`**
-- Added `[program:command-api]` section
-- Runs HTTP API server alongside existing services (mosquitto, gateway, ingest)
-- Priority 40 (starts after MQTT broker and gateway)
-
-**Modified: `docker/cloud-run/Dockerfile.all-in-one`**
-- Exposed port 8080 for HTTP traffic
-- Updated Cloud Run deployment to use `--port=8080`
-
-**Modified: `package.json`**
-- Added dependencies: `express@^4.21.2`, `@types/express@^5.0.0`
-
-#### 2. Frontend (Vercel)
-
-**Modified: All API Routes in `app/api/vehicle/`**
-- Removed MQTT client connection logic
-- Simplified to HTTP fetch() calls that forward to Cloud Run backend
-- Example pattern:
-```typescript
-const backendUrl = process.env.BACKEND_API_URL || 'https://mtc-backend-880316754524.asia-east1.run.app'
-const response = await fetch(`${backendUrl}/api/vehicle/lock`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ vin, locked })
-})
-```
-
-**Environment Variables:**
-- Added `BACKEND_API_URL` to Vercel (Production, Preview, Development)
-- Value: `https://mtc-backend-880316754524.asia-east1.run.app`
-- Updated `.env.local` for local development
-
-### Deployment Details
-
-**Cloud Run Service:**
-- Service: `mtc-backend`
-- Region: `asia-east1` (Hong Kong)
-- URL: https://mtc-backend-880316754524.asia-east1.run.app
-- Resources: 2GB RAM, 2 vCPU, min 1 instance, max 3 instances
-- Timeout: 3600s (1 hour)
-- No CPU throttling (always-on)
-
-**Container Services (managed by supervisor):**
-1. Mosquitto MQTT Broker (port 1883)
-2. SAIC Python Gateway (connects to MG iSmart API)
-3. Node.js Ingestion Service (writes to Supabase)
-4. **NEW:** Express HTTP API Server (port 8080)
-
-**Vercel Deployment:**
-- Production URL: https://mtc.air.zone
-- Preview URL: https://mtc-ismart-hxs9be4xi-masstransitcos-projects.vercel.app
-- Framework: Next.js 16.0.0
-- Region: Hong Kong (hkg1)
-- Deployment: Automatic from GitHub main branch
-
-### Test Results (2025-10-30)
-
-All commands successfully tested and working:
+### Starting the System Locally
 
 ```bash
-# Lock command
-curl -X POST https://mtc.air.zone/api/vehicle/lock \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","locked":true}'
-# Response: {"success":true,"message":"Vehicle locked successfully","commandId":39}
+# 1. Start MQTT broker and gateway
+docker-compose up -d
 
-# Find My Car (lights only)
-curl -X POST https://mtc.air.zone/api/vehicle/find \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","mode":"lights_only"}'
-# Response: {"success":true,"message":"Lights flashing","commandId":40}
+# 2. Start ingestion service
+npm run ingest
 
-# Climate control
-curl -X POST https://mtc.air.zone/api/vehicle/climate \
-  -H "Content-Type: application/json" \
-  -d '{"vin":"LSJWH4098PN070110","action":"on","temperature":22}'
-# Response: {"success":true,"message":"Climate control on command sent","commandId":41}
+# 3. Start Next.js dev server
+npm run dev
+
+# 4. Open dashboard
+open http://localhost:3000
 ```
-
-### Performance Improvements
-
-**Before Fix:**
-- Command response time: 24-53 seconds (timeout retries)
-- Success rate: ~0% (all timed out)
-- Error: "MQTT connack timeout"
-
-**After Fix:**
-- Command response time: 2-3 seconds
-- Success rate: 100%
-- Clean HTTP request/response cycle
-- Commands logged to database successfully
 
 ### Monitoring
 
 ```bash
-# Check Cloud Run logs
-gcloud run logs tail mtc-backend --region=asia-east1
+# View MQTT messages
+docker exec mtc-mqtt-broker mosquitto_sub -t 'saic/#' -v
 
-# Filter for HTTP API
-gcloud run logs tail mtc-backend --region=asia-east1 | grep "Command API"
+# View gateway logs
+docker logs mtc-ismart-gateway --tail 50 -f
 
-# Filter for MQTT publishes
-gcloud run logs tail mtc-backend --region=asia-east1 | grep "MQTT"
+# View ingestion logs
+tail -f /tmp/ingest.log
 
-# Check command history in database
-psql "$POSTGRES_URL_NON_POOLING" -c "SELECT id, vin, command_type, status, created_at FROM vehicle_commands ORDER BY created_at DESC LIMIT 10;"
+# Check database
+psql "$POSTGRES_URL_NON_POOLING" -c "SELECT vin, doors_locked, soc, updated_at FROM vehicle_status;"
 ```
 
-### Files Modified/Added
+### Deployment
 
-**Added:**
-- `server/command-api.ts` - HTTP API server
-- `MQTT-FIX-DEPLOYMENT.md` - Detailed deployment guide
+```bash
+# Deploy to Cloud Run
+gcloud builds submit --config cloudbuild.yaml
+gcloud run deploy mtc-backend \
+  --image=asia-east1-docker.pkg.dev/cityos-392102/mtc-containers/mtc-backend:latest \
+  --region=asia-east1
 
-**Modified:**
-- `app/api/vehicle/lock/route.ts`
-- `app/api/vehicle/climate/route.ts`
-- `app/api/vehicle/find/route.ts`
-- `app/api/vehicle/charge/route.ts`
-- `docker/cloud-run/supervisord.conf`
-- `docker/cloud-run/Dockerfile.all-in-one`
-- `package.json`
-- `.env.local`
-
-### Git Commit
-
+# Deploy to Vercel (automatic)
+git push origin main
 ```
-commit 14eb665
-Fix MQTT connection - use HTTP API proxy on Cloud Run
-
-- Created HTTP API server (server/command-api.ts) that runs on Cloud Run
-- Updated all Vercel API routes to forward commands via HTTP instead of MQTT
-- Modified Docker setup to run command API alongside MQTT broker
-- Updated package.json with express dependencies
-- Exposed port 8080 for HTTP API in Dockerfile
-
-This fixes the "connack timeout" errors by routing commands through
-HTTPS (Vercel → Cloud Run HTTP API → local MQTT → SAIC Gateway) instead
-of trying to establish MQTT connections from serverless functions.
-```
-
-### Known Issues & Future Improvements
-
-**Resolved:**
-- ✅ MQTT connection timeouts - Fixed with HTTP proxy architecture
-- ✅ Vehicle commands unresponsive - All commands now working
-- ✅ Serverless MQTT limitations - Eliminated by moving to Cloud Run
-
-**Future Enhancements:**
-- Add authentication/API key to HTTP API endpoints
-- Implement command result polling (verify vehicle actually responded)
-- Add retry logic for failed commands
-- Set up monitoring alerts for command failures
-- Consider using Cloud Run service-to-service authentication
-- Add rate limiting on HTTP API
 
 ---
 
-**Last Updated:** 2025-10-30
-**Version:** 1.3 - MQTT Connection Fix & HTTP API Proxy
-**Contributors:** MTC Team, Claude Code
+## Key Files
+
+### Backend
+- `server/command-api.ts` - Express.js command API server
+- `server/mqtt-client.ts` - MQTT connection management
+- `server/ingest.ts` - MQTT to Supabase ingestion service
+
+### Frontend
+- `components/main-dashboard.tsx` - Main dashboard with tabbed navigation
+- `components/vehicle-dashboard.tsx` - Original vehicle dashboard (legacy)
+- `components/vehicle-cards-view.tsx` - Vehicle cards for Cars tab
+- `components/map-view.tsx` - Google Maps view with vehicle markers
+- `components/logs-view.tsx` - Event logs viewer with filtering
+- `components/vehicle/` - Vehicle card subcomponents
+- `hooks/use-vehicle.ts` - Real-time vehicle data hooks
+- `hooks/use-vehicle-events.ts` - Real-time event logs hooks
+- `lib/supabase.ts` - Supabase client configuration
+- `lib/geocoding.ts` - Google Maps reverse geocoding
+
+### Configuration
+- `docker/cloud-run/Dockerfile.all-in-one` - Production container
+- `docker/cloud-run/supervisord.conf` - Process management
+- `docker/mosquitto/config/mosquitto-cloud.conf` - MQTT broker config
+- `docker/mosquitto/config/acl` - MQTT access control list
+- `cloudbuild.yaml` - Google Cloud Build configuration
+
+### Database
+- `supabase/migrations/001_vehicle_schema.sql` - Base schema
+- `supabase/migrations/002_fix_rls_anon.sql` - RLS policies
+- `supabase/migrations/003_add_door_columns.sql` - Door status
+- `supabase/migrations/004_add_light_columns.sql` - Light indicators
+- `supabase/migrations/005_add_climate_columns.sql` - Climate control
+- `supabase/migrations/006_add_plate_number.sql` - License plates
+- `supabase/migrations/007_add_vehicle_pin.sql` - Vehicle PIN storage
+- `supabase/migrations/008_update_vehicle_models.sql` - Vehicle models
+- `supabase/migrations/009_add_vehicle_events.sql` - Event logging system
+
+---
+
+## Security
+
+### MQTT ACL
+
+Access control configured for three users:
+
+**mg_gateway** (SAIC Gateway):
+- Read/write access to all vehicle topics
+- Subscribes to command topics
+- Publishes status updates
+
+**mtc_app** (Command API):
+- Write access to command topics
+- Read access to status topics
+- Cannot modify other data
+
+**mtc_ingest** (Ingestion Service):
+- Read-only access to all topics
+- Writes to database, not MQTT
+
+### Authentication Flow
+
+1. **Command API → MQTT**: Uses `mtc_app` credentials (no password, local broker)
+2. **MQTT → Gateway**: Local broker, no TLS needed (localhost)
+3. **Gateway → SAIC API**: Uses account credentials (PIN configured at API level)
+4. **SAIC API → Vehicle**: Cellular connection with encrypted communication
+
+**Important**: No PIN is included in MQTT payload. PINs are configured at the SAIC API account level.
+
+---
+
+## Troubleshooting
+
+### Commands Not Working
+
+1. Check Command API logs for MQTT publish confirmation
+2. Verify gateway logs show command received
+3. Ensure `SAIC_USER` matches in both command-api and gateway
+4. Check ACL permissions in `/docker/mosquitto/config/acl`
+5. Verify command logged in `vehicle_commands` table
+
+### No Data in Dashboard
+
+1. Check if gateway is polling vehicles
+2. Verify ingestion service is running
+3. Query database directly for vehicle_status
+4. Check Supabase Realtime is enabled
+5. Verify RLS policies allow anonymous read
+
+### MQTT Connection Issues
+
+1. Check broker is running in Cloud Run logs
+2. Verify ACL allows user to publish/subscribe
+3. Test locally with `mosquitto_pub` and `mosquitto_sub`
+
+For detailed troubleshooting, see [`command-system.md`](/Users/markau/mtc-ismart/command-system.md)
+
+---
+
+## Resources
+
+- **Command System Documentation**: [command-system.md](command-system.md)
+- **SAIC Gateway**: https://github.com/SAIC-iSmart-API/saic-python-mqtt-gateway
+- **Supabase Docs**: https://supabase.com/docs
+- **Next.js Docs**: https://nextjs.org/docs
+- **Mosquitto Docs**: https://mosquitto.org/man/mosquitto-conf-5.html
+- **shadcn/ui**: https://ui.shadcn.com
+
+---
+
+## Project Status
+
+**Started**: October 2025
+**Status**: Production-ready and operational
+
+### Verified Working (2025-11-03)
+- Lock/Unlock commands
+- Find My Car (all 4 modes)
+- Climate control
+- Charge control
+- Real-time dashboard updates
+- MQTT message routing
+- Database ingestion
+- Multi-vehicle support
+- Interactive map view with real-time vehicle locations
+- Event logging system with automatic triggers
+- Dark mode across all views
+- Tabbed navigation (Cars, Map, Logs)
+
+### Recent Updates (2025-11-03)
+- Added Google Maps integration with vector tiles and 3D controls
+- Implemented event logging system with database triggers
+- Added Logs view with filtering and real-time updates
+- Implemented full dark mode support
+- Added tabbed navigation UI
+- Vehicle markers color-coded by battery level
+- License plate displayed as primary identifier
+
+---
+
+*Last Updated: 2025-11-03*

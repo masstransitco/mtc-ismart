@@ -1,5 +1,5 @@
-import VehicleDashboard from "@/components/vehicle-dashboard"
+import MainDashboard from "@/components/main-dashboard"
 
 export default function Home() {
-  return <VehicleDashboard />
+  return <MainDashboard />
 }
