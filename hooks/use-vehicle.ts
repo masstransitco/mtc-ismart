@@ -13,6 +13,11 @@ export interface VehicleStatus {
   charge_current_a: number | null
   charge_voltage_v: number | null
   charge_power_kw: number | null
+  charging_plug_connected: boolean | null
+  hv_battery_active: boolean | null
+  battery_heating: boolean | null
+  charge_current_limit: string | null
+  charge_status_detailed: string | null
   battery_temp_c: number | null
   target_soc: number | null
   lat: number | null

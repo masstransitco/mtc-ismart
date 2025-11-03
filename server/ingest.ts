@@ -1,7 +1,9 @@
 import dotenv from 'dotenv'
 
-// Load .env.local file
-dotenv.config({ path: '.env.local' })
+// Load .env.local file only in development (not in production/Docker)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: '.env.local' })
+}
 
 console.log('[Ingest] Loaded env vars:', {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...',
@@ -32,6 +34,11 @@ interface VehicleStatusPayload {
   charge_current_a?: number
   charge_voltage_v?: number
   charge_power_kw?: number
+  charging_plug_connected?: boolean
+  hv_battery_active?: boolean
+  battery_heating?: boolean
+  charge_current_limit?: string
+  charge_status_detailed?: string
   lat?: number
   lon?: number
   altitude?: number
@@ -69,14 +76,25 @@ function safeParse(message: string): any {
 }
 
 function extractVin(topic: string): string | null {
-  // Topic format: saic/<user>/vehicles/<vin>/<category>/<subcategory>
-  // or: mg/<vin>/status/<category>
+  // Topic format: <mqtt_topic>/<user>/vehicles/<vin>/<category>/<subcategory>
+  // Example: saic/system@air.city/vehicles/LSJWH4092PN070121/drivetrain/soc
   const parts = topic.split('/')
-  if (parts[0] === 'saic' && parts[2] === 'vehicles') {
-    return parts[3]
-  } else if (parts[0] === 'mg') {
+
+  // Handle saic/<user>/vehicles/<VIN>/... format
+  if (parts[0] === 'saic' && parts[2] === 'vehicles' && parts[3]) {
+    return parts[3]  // VIN is at index 3
+  }
+
+  // Handle legacy <user>/vehicles/<VIN>/... format (without mqtt_topic prefix)
+  if (parts[1] === 'vehicles' && parts[2]) {
+    return parts[2]  // VIN is at index 2 for <user>/vehicles/<VIN>/...
+  }
+
+  // Handle mg/<VIN>/... format
+  if (parts[0] === 'mg' && parts[1]) {
     return parts[1]
   }
+
   return null
 }
 
@@ -88,7 +106,7 @@ async function handleMessage(topic: string, message: Buffer) {
   try {
     const vin = extractVin(topic)
     if (!vin) {
-      console.warn(`[Ingest] Could not extract VIN from topic: ${topic}`)
+      console.log(JSON.stringify({svc:"ingest",level:"warn",event:"no_vin",topic}))
       return
     }
 
@@ -97,13 +115,14 @@ async function handleMessage(topic: string, message: Buffer) {
     const parsedValue = safeParse(value)
     const actualValue = parsedValue.value !== undefined ? parsedValue.value : parsedValue
 
-    console.log(`[Ingest] ${vin}: ${topic.split('/').slice(-2).join('/')} = ${value}`)
+    console.log(JSON.stringify({svc:"ingest",level:"info",event:"message",topic,vin,bytes:message.length}))
 
     // Get or create cache entry for this VIN
     let cache = vehicleDataCache.get(vin)
     if (!cache) {
       cache = { lastUpdate: Date.now() }
       vehicleDataCache.set(vin, cache)
+      console.log(`[Ingest] 🆕 Created cache for new vehicle: ${vin}`)
 
       // Ensure vehicle exists
       await supabase
@@ -134,6 +153,14 @@ async function handleMessage(topic: string, message: Buffer) {
       cache.charge_voltage_v = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/power')) {
       cache.charge_power_kw = parseFloat(actualValue) / 1000 // Convert W to kW
+    } else if (topic.includes('/drivetrain/chargerConnected')) {
+      cache.charging_plug_connected = parseBoolean(actualValue)
+    } else if (topic.includes('/drivetrain/hvBatteryActive')) {
+      cache.hv_battery_active = parseBoolean(actualValue)
+    } else if (topic.includes('/drivetrain/batteryHeating')) {
+      cache.battery_heating = parseBoolean(actualValue)
+    } else if (topic.includes('/drivetrain/chargeCurrentLimit')) {
+      cache.charge_current_limit = actualValue.toString()
     } else if (topic.includes('/drivetrain/mileage')) {
       cache.odometer_km = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/running')) {
@@ -207,9 +234,9 @@ setInterval(async () => {
           })
 
           if (error) {
-            console.error(`[Ingest] Error upserting ${vin}:`, error)
+            console.error(`[Ingest] ❌ Error upserting ${vin}:`, error)
           } else {
-            console.log(`[Ingest] ✓ Updated ${vin} with ${Object.keys(statusData).length} fields`)
+            console.log(`[Ingest] ✅ Updated ${vin} with ${Object.keys(statusData).length} fields`)
           }
 
           // Record telemetry for significant updates
@@ -241,6 +268,10 @@ async function insertTelemetry(vin: string, statusData: Partial<VehicleStatusPay
     charge_power_kw: statusData.charge_power_kw,
     charge_current_a: statusData.charge_current_a,
     charge_voltage_v: statusData.charge_voltage_v,
+    charging_plug_connected: statusData.charging_plug_connected,
+    hv_battery_active: statusData.hv_battery_active,
+    battery_heating: statusData.battery_heating,
+    charge_current_limit: statusData.charge_current_limit,
     lat: statusData.lat,
     lon: statusData.lon,
     altitude: statusData.altitude,
@@ -270,24 +301,30 @@ export function startIngestion() {
   const client = getMqttClient(config)
 
   client.on('connect', async () => {
-    console.log('[Ingest] Connected to MQTT broker')
+    console.log(JSON.stringify({svc:"ingest",level:"info",event:"connected",broker:config.brokerUrl}))
 
     // Subscribe to SAIC gateway's actual topic structure
+    // Gateway publishes with format: <mqtt_topic>/<user>/vehicles/<vin>/<category>/<subcategory>
+    // Default MQTT_TOPIC is "saic"
+    const mqttTopic = process.env.MQTT_TOPIC || 'saic'
+    const saicUser = process.env.SAIC_USER || 'system@air.city'
+
     const topics = [
-      'saic/+/vehicles/+/drivetrain/#',   // Battery, charge, range, mileage
-      'saic/+/vehicles/+/location/#',     // GPS, heading, speed
-      'saic/+/vehicles/+/climate/#',      // Temperature, HVAC
-      'saic/+/vehicles/+/doors/#',        // Lock status, windows
-      'saic/+/vehicles/+/lights/#',       // Headlights, side lights
-      'saic/+/vehicles/+/refresh/#',      // Refresh state
+      `${mqttTopic}/${saicUser}/vehicles/+/drivetrain/#`,   // Battery, charge, range, mileage
+      `${mqttTopic}/${saicUser}/vehicles/+/location/#`,     // GPS, heading, speed
+      `${mqttTopic}/${saicUser}/vehicles/+/climate/#`,      // Temperature, HVAC
+      `${mqttTopic}/${saicUser}/vehicles/+/doors/#`,        // Lock status, windows
+      `${mqttTopic}/${saicUser}/vehicles/+/lights/#`,       // Headlights, side lights
+      `${mqttTopic}/${saicUser}/vehicles/+/tyres/#`,        // Tire pressure
+      `${mqttTopic}/${saicUser}/vehicles/+/windows/#`,      // Window status
+      `${mqttTopic}/${saicUser}/vehicles/+/refresh/#`,      // Refresh state
     ]
 
     try {
       await subscribeToTopics(client, topics)
-      console.log('[Ingest] Subscribed to topics:', topics)
-      console.log('[Ingest] Waiting for vehicle data...')
+      console.log(JSON.stringify({svc:"ingest",level:"info",event:"subscribe",pattern:topics[0],count:topics.length}))
     } catch (error) {
-      console.error('[Ingest] Failed to subscribe:', error)
+      console.log(JSON.stringify({svc:"ingest",level:"error",event:"subscribe_failed",error:String(error)}))
     }
   })
 

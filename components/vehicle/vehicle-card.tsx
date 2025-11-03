@@ -75,7 +75,11 @@ export function VehicleCard({
               </div>
               <div className="flex items-center gap-2">
                 <LockStatus locked={vehicle.doors_locked} />
-                <ChargingIndicator isCharging={vehicle.charging_state === "Charging"} />
+                <ChargingIndicator
+                  isCharging={vehicle.charging_state === "Charging"}
+                  isPluggedIn={vehicle.charging_plug_connected}
+                  batteryHeating={vehicle.battery_heating}
+                />
               </div>
             </div>
 
@@ -165,6 +169,44 @@ export function VehicleCard({
             iconColor="text-primary"
           />
         </div>
+
+        {/* Charging Details - Show when plugged in or charging */}
+        {(vehicle.charging_plug_connected || vehicle.charging_state === "Charging") && (
+          <div className="p-3 bg-accent/30 rounded-lg border border-border/30 mb-3">
+            <div className="text-xs font-medium text-muted-foreground mb-2">Charging Status</div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {vehicle.charge_power_kw !== null && vehicle.charge_power_kw > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Power:</span>{" "}
+                  <span className="font-medium text-foreground">{vehicle.charge_power_kw.toFixed(2)} kW</span>
+                </div>
+              )}
+              {vehicle.charge_current_a !== null && vehicle.charge_current_a > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Current:</span>{" "}
+                  <span className="font-medium text-foreground">{vehicle.charge_current_a.toFixed(1)} A</span>
+                </div>
+              )}
+              {vehicle.charge_voltage_v !== null && vehicle.charge_voltage_v > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Voltage:</span>{" "}
+                  <span className="font-medium text-foreground">{vehicle.charge_voltage_v.toFixed(0)} V</span>
+                </div>
+              )}
+              {vehicle.charge_current_limit && (
+                <div>
+                  <span className="text-muted-foreground">Limit:</span>{" "}
+                  <span className="font-medium text-foreground">{vehicle.charge_current_limit}</span>
+                </div>
+              )}
+              {vehicle.battery_heating && (
+                <div className="col-span-2">
+                  <span className="text-warning font-medium">⚡ Battery Heating Active</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Location */}
         {location && (
