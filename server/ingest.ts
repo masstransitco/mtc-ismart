@@ -180,8 +180,8 @@ async function handleMessage(topic: string, message: Buffer) {
       cache.charge_current_a = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/voltage')) {
       cache.charge_voltage_v = parseFloat(actualValue)
-    } else if (topic.endsWith('/drivetrain/power')) {
-      // Match exact topic, not powerUsage* topics
+    } else if (topic.endsWith('/drivetrain/power') && !topic.includes('Usage')) {
+      // Match exact /power topic only, exclude powerUsage* topics
       const power = parseFloat(actualValue)
       // Power is already in kW (negative for charging), use absolute value for display
       cache.charge_power_kw = Math.abs(power)
