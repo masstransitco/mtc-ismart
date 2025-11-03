@@ -182,8 +182,8 @@ async function handleMessage(topic: string, message: Buffer) {
       cache.charge_voltage_v = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/power')) {
       const power = parseFloat(actualValue)
-      // Store absolute value for display (charging shows as positive power)
-      cache.charge_power_kw = Math.abs(power) / 1000 // Convert W to kW
+      // Power is already in kW (negative for charging), use absolute value for display
+      cache.charge_power_kw = Math.abs(power)
     } else if (topic.includes('/drivetrain/chargerConnected')) {
       cache.charging_plug_connected = parseBoolean(actualValue)
     } else if (topic.includes('/drivetrain/hvBatteryActive')) {
