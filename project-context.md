@@ -286,6 +286,10 @@ Actions: `start`, `stop`
 - **URL**: https://mtc.air.zone
 - **Region**: Hong Kong (hkg1)
 - **Deployment**: Automatic from GitHub main branch
+- **Project ID**: prj_045WS68YL0dtiPIGHtc5U7XhD95Q
+- **Project Name**: mtc-ismart
+- **Build Command**: `npm run build`
+- **Output Directory**: `.next`
 
 #### Supabase
 - **URL**: https://sssyxnpanayqvamstind.supabase.co
@@ -336,6 +340,17 @@ NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyA8rDrxBzMRlgbA7BQ2DoY31gEXzZ4Ours
 NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID=fac8d0a4b514e481e907fa98
 BACKEND_API_URL=https://mtc-backend-880316754524.asia-east1.run.app
 ```
+
+**Important**: When adding environment variables to Vercel, use `printf` instead of `echo` to avoid trailing newlines:
+```bash
+# ❌ Wrong - adds newline character
+echo "value" | vercel env add VAR_NAME production
+
+# ✅ Correct - no newline
+printf "value" | vercel env add VAR_NAME production
+```
+
+Trailing newlines in environment variables will cause runtime errors, especially for values like Map IDs and API keys.
 
 ---
 
@@ -550,6 +565,70 @@ Access control configured for three users:
 1. Check broker is running in Cloud Run logs
 2. Verify ACL allows user to publish/subscribe
 3. Test locally with `mosquitto_pub` and `mosquitto_sub`
+
+### Vercel Deployment Issues
+
+#### Map Not Rendering in Production
+**Symptom**: Google Maps shows blank or doesn't load custom styling
+**Cause**: Environment variable has trailing newline character
+**Solution**:
+```bash
+# Remove the variable
+vercel env rm NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID production --yes
+
+# Re-add without newline using printf
+printf "fac8d0a4b514e481e907fa98" | vercel env add NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID production
+
+# Verify the value
+vercel env pull .env.vercel.production
+cat .env.vercel.production | grep MAP_ID
+```
+
+#### Build Fails with "Invalid Version" Error
+**Symptom**: `npm install` fails with version validation error
+**Cause**: Corrupted `package-lock.json` file
+**Solution**:
+```bash
+# Remove package-lock.json (it's gitignored)
+rm package-lock.json
+
+# Trigger new deployment
+git commit --allow-empty -m "Trigger rebuild"
+git push origin main
+```
+
+#### Environment Variables Not Taking Effect
+**Symptom**: Changes to env vars don't appear in production
+**Solution**:
+1. Environment variables are only loaded at build time for `NEXT_PUBLIC_*` variables
+2. After changing env vars, trigger a new deployment:
+   ```bash
+   git commit --allow-empty -m "Rebuild with new env vars"
+   git push origin main
+   ```
+3. Verify deployment status: `vercel ls`
+
+### Managing Vercel Environment Variables
+
+```bash
+# List all environment variables
+vercel env ls
+
+# Add a new variable (use printf to avoid newlines!)
+printf "your-value" | vercel env add VAR_NAME production
+
+# Remove a variable
+vercel env rm VAR_NAME production --yes
+
+# Pull environment variables to local file
+vercel env pull .env.vercel.production
+
+# Check deployment status
+vercel ls
+
+# Inspect a specific deployment
+vercel inspect <deployment-url>
+```
 
 For detailed troubleshooting, see [`command-system.md`](/Users/markau/mtc-ismart/command-system.md)
 
