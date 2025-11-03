@@ -175,16 +175,16 @@ export function VehicleCard({
           <div className="p-3 bg-accent/30 rounded-lg border border-border/30 mb-3">
             <div className="text-xs font-medium text-muted-foreground mb-2">Charging Status</div>
             <div className="grid grid-cols-2 gap-2 text-xs">
-              {vehicle.charge_power_kw !== null && vehicle.charge_power_kw > 0 && (
+              {vehicle.charge_power_kw !== null && Math.abs(vehicle.charge_power_kw) > 0 && (
                 <div>
                   <span className="text-muted-foreground">Power:</span>{" "}
-                  <span className="font-medium text-foreground">{vehicle.charge_power_kw.toFixed(2)} kW</span>
+                  <span className="font-medium text-foreground">{Math.abs(vehicle.charge_power_kw).toFixed(2)} kW</span>
                 </div>
               )}
-              {vehicle.charge_current_a !== null && vehicle.charge_current_a > 0 && (
+              {vehicle.charge_current_a !== null && Math.abs(vehicle.charge_current_a) > 0 && (
                 <div>
                   <span className="text-muted-foreground">Current:</span>{" "}
-                  <span className="font-medium text-foreground">{vehicle.charge_current_a.toFixed(1)} A</span>
+                  <span className="font-medium text-foreground">{Math.abs(vehicle.charge_current_a).toFixed(1)} A</span>
                 </div>
               )}
               {vehicle.charge_voltage_v !== null && vehicle.charge_voltage_v > 0 && (
