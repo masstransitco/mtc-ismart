@@ -99,7 +99,12 @@ function extractVin(topic: string): string | null {
 }
 
 // Cache to accumulate vehicle data before writing
-const vehicleDataCache: Map<string, Partial<VehicleStatusPayload> & { lastUpdate: number }> = new Map()
+interface VehicleCache extends Partial<VehicleStatusPayload> {
+  lastUpdate: number
+  prevSoc?: number
+  gateway_bool_charging?: boolean
+}
+const vehicleDataCache: Map<string, VehicleCache> = new Map()
 const CACHE_FLUSH_INTERVAL = 5000 // Flush every 5 seconds
 
 async function handleMessage(topic: string, message: Buffer) {
@@ -115,7 +120,24 @@ async function handleMessage(topic: string, message: Buffer) {
     const parsedValue = safeParse(value)
     const actualValue = parsedValue.value !== undefined ? parsedValue.value : parsedValue
 
-    console.log(JSON.stringify({svc:"ingest",level:"info",event:"message",topic,vin,bytes:message.length}))
+    // Log raw values for critical topics to debug mismatches
+    const debugTopics = ['charging', 'power', 'current']
+    const shouldDebug = debugTopics.some(t => topic.includes(t))
+
+    if (shouldDebug) {
+      console.log(JSON.stringify({
+        svc:"ingest",
+        level:"debug",
+        event:"message_raw",
+        topic,
+        vin,
+        raw:value,
+        parsed:actualValue,
+        bytes:message.length
+      }))
+    } else {
+      console.log(JSON.stringify({svc:"ingest",level:"info",event:"message",topic,vin,bytes:message.length}))
+    }
 
     // Get or create cache entry for this VIN
     let cache = vehicleDataCache.get(vin)
@@ -141,39 +163,27 @@ async function handleMessage(topic: string, message: Buffer) {
 
     // Map SAIC topics to our database fields
     if (topic.includes('/drivetrain/soc')) {
-      cache.soc = parseFloat(actualValue)
-      cache.soc_precise = parseFloat(actualValue)
+      const newSoc = parseFloat(actualValue)
+      // Track previous SoC for delta detection
+      if (cache.soc !== undefined && cache.soc !== newSoc) {
+        cache.prevSoc = cache.soc
+      }
+      cache.soc = newSoc
+      cache.soc_precise = newSoc
     } else if (topic.includes('/drivetrain/range')) {
       cache.range_km = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/charging')) {
-      // Note: Don't rely solely on this boolean, also check current/power
-      const isChargingBoolean = parseBoolean(actualValue)
-      if (isChargingBoolean) {
-        cache.charging_state = 'Charging'
-      }
-      // Don't set to Idle here - let current/power determine it
+      // Store gateway boolean for audit/debugging (unreliable)
+      cache.gateway_bool_charging = parseBoolean(actualValue)
+      // Do NOT use this to set charging_state - derived logic will handle it
     } else if (topic.includes('/drivetrain/current')) {
-      const current = parseFloat(actualValue)
-      cache.charge_current_a = current
-
-      // MG/SAIC uses negative current for charging (positive for discharging)
-      // If current is significantly negative and plugged in, vehicle is charging
-      if (current < -1) {
-        cache.charging_state = 'Charging'
-      } else if (current >= -1 && current <= 1) {
-        cache.charging_state = 'Idle'
-      }
+      cache.charge_current_a = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/voltage')) {
       cache.charge_voltage_v = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/power')) {
       const power = parseFloat(actualValue)
-      // Power might be negative for charging, use absolute value
+      // Store absolute value for display (charging shows as positive power)
       cache.charge_power_kw = Math.abs(power) / 1000 // Convert W to kW
-
-      // Also use power to determine charging state
-      if (Math.abs(power) > 100) { // More than 100W
-        cache.charging_state = 'Charging'
-      }
     } else if (topic.includes('/drivetrain/chargerConnected')) {
       cache.charging_plug_connected = parseBoolean(actualValue)
     } else if (topic.includes('/drivetrain/hvBatteryActive')) {
@@ -240,13 +250,55 @@ async function handleMessage(topic: string, message: Buffer) {
   }
 }
 
+// Derive charging state from multiple signals (ground truth)
+function deriveChargingState(cache: VehicleCache): string {
+  const isPlugged = cache.charging_plug_connected === true
+  const current = cache.charge_current_a ?? 0
+  const power = cache.charge_power_kw ?? 0
+  const soc = cache.soc ?? 0
+  const prevSoc = cache.prevSoc ?? soc
+
+  // SAIC convention: negative current = charging, positive = discharging
+  const isChargingByI = current < -1  // More than 1A charging
+  const isChargingByP = power > 0.1   // More than 100W
+  const socDelta = soc - prevSoc
+  const isSocIncreasing = socDelta > 0.02  // SoC increased by >0.02%
+
+  // Derived logic: plugged + (negative current OR power flow OR SoC increasing)
+  if (isPlugged && (isChargingByI || isChargingByP || isSocIncreasing)) {
+    // Log mismatch for debugging if gateway says not charging
+    if (cache.gateway_bool_charging === false) {
+      console.log(JSON.stringify({
+        svc:"ingest",
+        level:"warn",
+        event:"charging_mismatch",
+        vin:cache.vin,
+        gateway_bool:false,
+        derived:"Charging",
+        current,
+        power,
+        socDelta,
+        indicators:{isChargingByI,isChargingByP,isSocIncreasing}
+      }))
+    }
+    return 'Charging'
+  } else if (isPlugged) {
+    return 'Plugged'  // Plugged but idle
+  } else {
+    return 'Disconnected'
+  }
+}
+
 // Flush cached data to database periodically
 setInterval(async () => {
   for (const [vin, cache] of vehicleDataCache.entries()) {
     // Only flush if we have data and it's been updated recently
     if (Object.keys(cache).length > 1 && Date.now() - cache.lastUpdate < 60000) {
       try {
-        const { lastUpdate, ...statusData } = cache
+        // Derive charging state from all signals (ground truth)
+        cache.charging_state = deriveChargingState(cache)
+
+        const { lastUpdate, prevSoc, gateway_bool_charging, ...statusData } = cache
 
         if (Object.keys(statusData).length > 0) {
           const { error } = await supabase.rpc('upsert_vehicle_status', {
