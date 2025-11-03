@@ -19,12 +19,13 @@ export function ChargingIndicator({
     return (
       <div
         className={cn(
-          "p-2 rounded-lg bg-success/10 animate-pulse",
+          "p-2 rounded-lg animate-pulse",
           className
         )}
+        style={{ backgroundColor: 'hsl(var(--success) / 0.1)' }}
         title="Actively Charging"
       >
-        <Zap className="w-4 h-4 text-success" />
+        <Zap className="w-4 h-4" style={{ color: 'hsl(var(--success))' }} />
       </div>
     )
   }
@@ -34,12 +35,13 @@ export function ChargingIndicator({
     return (
       <div
         className={cn(
-          "p-2 rounded-lg bg-info/10",
+          "p-2 rounded-lg",
           className
         )}
+        style={{ backgroundColor: 'hsl(var(--info) / 0.1)' }}
         title="Plugged In (Not Charging)"
       >
-        <Plug className="w-4 h-4 text-info" />
+        <Plug className="w-4 h-4" style={{ color: 'hsl(var(--info))' }} />
       </div>
     )
   }
@@ -49,12 +51,13 @@ export function ChargingIndicator({
     return (
       <div
         className={cn(
-          "p-2 rounded-lg bg-warning/10",
+          "p-2 rounded-lg",
           className
         )}
+        style={{ backgroundColor: 'hsl(var(--warning) / 0.1)' }}
         title="Battery Heating Active"
       >
-        <Battery className="w-4 h-4 text-warning" />
+        <Battery className="w-4 h-4" style={{ color: 'hsl(var(--warning))' }} />
       </div>
     )
   }

@@ -146,13 +146,34 @@ async function handleMessage(topic: string, message: Buffer) {
     } else if (topic.includes('/drivetrain/range')) {
       cache.range_km = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/charging')) {
-      cache.charging_state = parseBoolean(actualValue) ? 'Charging' : 'Idle'
+      // Note: Don't rely solely on this boolean, also check current/power
+      const isChargingBoolean = parseBoolean(actualValue)
+      if (isChargingBoolean) {
+        cache.charging_state = 'Charging'
+      }
+      // Don't set to Idle here - let current/power determine it
     } else if (topic.includes('/drivetrain/current')) {
-      cache.charge_current_a = parseFloat(actualValue)
+      const current = parseFloat(actualValue)
+      cache.charge_current_a = current
+
+      // MG/SAIC uses negative current for charging (positive for discharging)
+      // If current is significantly negative and plugged in, vehicle is charging
+      if (current < -1) {
+        cache.charging_state = 'Charging'
+      } else if (current >= -1 && current <= 1) {
+        cache.charging_state = 'Idle'
+      }
     } else if (topic.includes('/drivetrain/voltage')) {
       cache.charge_voltage_v = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/power')) {
-      cache.charge_power_kw = parseFloat(actualValue) / 1000 // Convert W to kW
+      const power = parseFloat(actualValue)
+      // Power might be negative for charging, use absolute value
+      cache.charge_power_kw = Math.abs(power) / 1000 // Convert W to kW
+
+      // Also use power to determine charging state
+      if (Math.abs(power) > 100) { // More than 100W
+        cache.charging_state = 'Charging'
+      }
     } else if (topic.includes('/drivetrain/chargerConnected')) {
       cache.charging_plug_connected = parseBoolean(actualValue)
     } else if (topic.includes('/drivetrain/hvBatteryActive')) {
