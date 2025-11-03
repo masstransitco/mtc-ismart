@@ -53,3 +53,29 @@ docker/mosquitto/certs/*.srl
 
 # supabase
 .supabase/
+
+# Archives and temporary files
+*.zip
+Archive/
+Archive*/
+
+# Test files
+test-*.mjs
+test-*.ts
+check_*.ts
+
+# Documentation backups
+*.backup
+*.bak
+
+# Third-party dependencies/downloads
+saic-python-mqtt-gateway-main/
+
+# Dev dockerfiles
+Dockerfile.dev-*
+
+# Lock files (optional - uncomment if you want to ignore)
+package-lock.json
+
+# Markdown documentation (if you prefer to keep separate)
+command-system.md
