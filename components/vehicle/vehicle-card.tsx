@@ -3,12 +3,16 @@ import { VehicleStatus } from "@/hooks/use-vehicle"
 import { VehicleStatusBadge } from "./status-badge"
 import { LockStatus } from "./lock-status"
 import { ChargingIndicator } from "./charging-indicator"
+import { IgnitionIndicator } from "./ignition-indicator"
+import { ParkingIndicator } from "./parking-indicator"
+import { MotionStatus } from "./motion-status"
 import { StatItem } from "./stat-item"
 import { VehicleControls } from "./vehicle-controls"
 import { ClimateControls } from "./climate-controls"
 import { FindMyCarControls } from "./find-my-car-controls"
 import { getVehicleStatus } from "@/lib/vehicle-status"
 import { cn } from "@/lib/utils"
+import { useSpeedUnit } from "@/components/main-dashboard"
 import {
   Battery,
   Navigation,
@@ -49,6 +53,7 @@ export function VehicleCard({
   formatTimestamp,
 }: VehicleCardProps) {
   const status = getVehicleStatus(vehicle)
+  const { convertSpeed, getSpeedLabel } = useSpeedUnit()
 
   return (
     <Card className={cn(
@@ -74,6 +79,8 @@ export function VehicleCard({
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <ParkingIndicator isParked={vehicle.is_parked} />
+                <IgnitionIndicator ignitionOn={vehicle.ignition} />
                 <LockStatus locked={vehicle.doors_locked} />
                 <ChargingIndicator
                   isCharging={vehicle.charging_state === "Charging"}
@@ -165,10 +172,18 @@ export function VehicleCard({
           <StatItem
             icon={Gauge}
             label="Speed"
-            value={`${vehicle.speed?.toFixed(0) || 0} km/h`}
+            value={`${convertSpeed(vehicle.speed)?.toFixed(0) || 0} ${getSpeedLabel()}`}
             iconColor="text-primary"
           />
         </div>
+
+        {/* Motion Status - Show when vehicle is moving */}
+        <MotionStatus
+          motionState={vehicle.motion_state}
+          speed={vehicle.speed}
+          currentA={vehicle.charge_current_a}
+          powerKw={vehicle.charge_power_kw}
+        />
 
         {/* Charging Details - Show when plugged in or charging */}
         {(vehicle.charging_plug_connected || vehicle.charging_state === "Charging") && (
@@ -245,6 +260,8 @@ export function VehicleCard({
         {/* Find My Car Controls */}
         <FindMyCarControls
           vin={vehicle.vin}
+          doorsLocked={vehicle.doors_locked}
+          ignition={vehicle.ignition}
           commandLoading={commandLoading}
           onFindCommand={onFindCommand}
         />

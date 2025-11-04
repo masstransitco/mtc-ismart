@@ -10,6 +10,7 @@ export interface VehicleStatus {
   soc_precise: number | null
   range_km: number | null
   charging_state: string | null
+  motion_state: string | null
   charge_current_a: number | null
   charge_voltage_v: number | null
   charge_power_kw: number | null
@@ -41,6 +42,7 @@ export interface VehicleStatus {
   remote_climate_active: boolean | null
   ignition: boolean | null
   engine_running: boolean | null
+  is_parked: boolean | null
   odometer_km: number | null
   lights_main_beam: boolean | null
   lights_dipped_beam: boolean | null
@@ -111,15 +113,17 @@ export function useVehicle(vin: string) {
           setStatus((prev) => ({ ...prev, ...payload.new } as VehicleStatus))
         }
       )
-      .subscribe((status, err) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log(`[useVehicle] ✓ Realtime subscribed for vehicle ${vin}`)
         } else if (status === 'CHANNEL_ERROR') {
-          console.error(`[useVehicle] ❌ Realtime error for vehicle ${vin}:`, err)
-          setError(`Realtime connection failed: ${err?.message || 'Unknown error'}`)
+          console.error(`[useVehicle] ❌ Realtime error for vehicle ${vin}`)
+          setError('Realtime connection failed')
         } else if (status === 'TIMED_OUT') {
           console.error(`[useVehicle] ⏱️  Realtime timeout for vehicle ${vin}`)
           setError('Realtime connection timed out')
+        } else if (status === 'CLOSED') {
+          console.log(`[useVehicle] Realtime connection closed for vehicle ${vin}`)
         }
       })
 
@@ -191,15 +195,17 @@ export function useVehicles() {
           }
         }
       )
-      .subscribe((status, err) => {
+      .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log('[useVehicles] ✓ Realtime subscribed for all vehicles')
         } else if (status === 'CHANNEL_ERROR') {
-          console.error('[useVehicles] ❌ Realtime error:', err)
-          setError(`Realtime connection failed: ${err?.message || 'Unknown error'}`)
+          console.error('[useVehicles] ❌ Realtime error')
+          setError('Realtime connection failed')
         } else if (status === 'TIMED_OUT') {
           console.error('[useVehicles] ⏱️  Realtime timeout')
           setError('Realtime connection timed out')
+        } else if (status === 'CLOSED') {
+          console.log('[useVehicles] Realtime connection closed')
         }
       })
 
