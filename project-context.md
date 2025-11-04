@@ -104,8 +104,21 @@ Latest status snapshot (1 row per VIN)
 vin TEXT PRIMARY KEY
 soc NUMERIC(5,2)             -- State of Charge %
 range_km NUMERIC             -- Estimated range
-charging_state TEXT          -- Idle|Charging|Complete
+charging_state TEXT          -- Charging|Plugged|Disconnected (derived)
+motion_state TEXT            -- Regenerating|Propelling|Coasting (planned)
+charge_current_a NUMERIC     -- Charging current (negative = charging)
+charge_voltage_v NUMERIC     -- Battery pack voltage
+charge_power_kw NUMERIC      -- Charging power
+charging_plug_connected BOOLEAN  -- Physical cable connection
+hv_battery_active BOOLEAN    -- High voltage battery state
+battery_heating BOOLEAN      -- Battery preconditioning
+charge_current_limit TEXT    -- 6A|8A|16A|Max
+charge_status_detailed TEXT  -- Detailed charge status
 lat, lon NUMERIC             -- GPS coordinates
+gps_fix_quality TEXT         -- FIX_2D|FIX_3D|UNKNOWN
+gps_timestamp TIMESTAMPTZ    -- GPS receiver timestamp
+gps_age_seconds INTEGER      -- Age of GPS fix
+is_parked BOOLEAN            -- Parking brake engaged
 doors_locked BOOLEAN
 door_driver_open BOOLEAN
 door_passenger_open BOOLEAN
@@ -137,8 +150,27 @@ event_type TEXT              -- charge|location|vehicle_state
 soc NUMERIC(5,2)
 range_km NUMERIC
 charging_state TEXT
+motion_state TEXT
 charge_power_kw NUMERIC
+charge_current_a NUMERIC
+charge_voltage_v NUMERIC
+charging_plug_connected BOOLEAN
+hv_battery_active BOOLEAN
+battery_heating BOOLEAN
+charge_current_limit TEXT
 lat, lon NUMERIC
+gps_fix_quality TEXT
+gps_timestamp TIMESTAMPTZ
+gps_age_seconds INTEGER
+is_parked BOOLEAN
+soc_timestamp TIMESTAMPTZ     -- Per-signal timestamps
+lat_timestamp TIMESTAMPTZ
+lon_timestamp TIMESTAMPTZ
+speed_timestamp TIMESTAMPTZ
+ignition_timestamp TIMESTAMPTZ
+doors_locked_timestamp TIMESTAMPTZ
+charging_state_timestamp TIMESTAMPTZ
+charge_power_timestamp TIMESTAMPTZ
 raw_payload JSONB
 ```
 
@@ -182,12 +214,26 @@ Automatic triggers log:
 
 ### Status Topics (Published by Gateway)
 
+**Note**: SAIC API sign convention - negative current/power values indicate charging, positive indicate discharging.
+
 ```
 saic/<user>/vehicles/<vin>/drivetrain/soc
 saic/<user>/vehicles/<vin>/drivetrain/range
 saic/<user>/vehicles/<vin>/drivetrain/charging
+saic/<user>/vehicles/<vin>/drivetrain/current
+saic/<user>/vehicles/<vin>/drivetrain/voltage
+saic/<user>/vehicles/<vin>/drivetrain/power
+saic/<user>/vehicles/<vin>/drivetrain/chargerConnected
+saic/<user>/vehicles/<vin>/drivetrain/hvBatteryActive
+saic/<user>/vehicles/<vin>/drivetrain/batteryHeating
+saic/<user>/vehicles/<vin>/drivetrain/chargeCurrentLimit
+saic/<user>/vehicles/<vin>/drivetrain/running         # Ignition/engine
+saic/<user>/vehicles/<vin>/drivetrain/parked          # Parking brake
 saic/<user>/vehicles/<vin>/location/latitude
 saic/<user>/vehicles/<vin>/location/longitude
+saic/<user>/vehicles/<vin>/location/gpsStatus         # FIX_2D|FIX_3D|UNKNOWN
+saic/<user>/vehicles/<vin>/location/gpsTimestamp      # GPS receiver timestamp
+saic/<user>/vehicles/<vin>/location/gpsAgeSeconds     # GPS fix age
 saic/<user>/vehicles/<vin>/doors/locked
 saic/<user>/vehicles/<vin>/doors/driver
 saic/<user>/vehicles/<vin>/doors/passenger
@@ -373,6 +419,8 @@ Trailing newlines in environment variables will cause runtime errors, especially
 - ✅ **Interactive Map View**: Google Maps with vehicle markers and real-time locations
 - ✅ **Event Logs**: Comprehensive event tracking with filtering and real-time updates
 - ✅ **Dark Mode**: Full dark mode support across all views
+- ✅ **Status Indicators**: Parking brake, ignition, lock, and charging indicators
+- ✅ **GPS Monitoring**: GPS fix quality tracking (2D/3D fix status)
 
 ### Dashboard Features
 
@@ -508,6 +556,12 @@ git push origin main
 - `supabase/migrations/007_add_vehicle_pin.sql` - Vehicle PIN storage
 - `supabase/migrations/008_update_vehicle_models.sql` - Vehicle models
 - `supabase/migrations/009_add_vehicle_events.sql` - Event logging system
+- `supabase/migrations/011_add_motion_state.sql` - Motion state field (planned)
+- `supabase/migrations/012_add_ignition_event_logging.sql` - Ignition event tracking
+- `supabase/migrations/013_add_is_parked.sql` - Parking brake status
+- `supabase/migrations/014_add_gps_fix_quality.sql` - GPS fix quality tracking
+- `supabase/migrations/015_add_per_signal_timestamps.sql` - Per-signal temporal tracking
+- `supabase/migrations/016_add_gps_timestamp_metadata.sql` - GPS timestamp and age
 
 ---
 
@@ -664,7 +718,27 @@ For detailed troubleshooting, see [`command-system.md`](/Users/markau/mtc-ismart
 - Dark mode across all views
 - Tabbed navigation (Cars, Map, Logs)
 
-### Recent Updates (2025-11-03)
+### Recent Updates
+
+#### 2025-11-04: Advanced Telemetry & Status Indicators
+- **Database Enhancements**:
+  - Added `is_parked` field for parking brake status tracking
+  - Added `gps_fix_quality` field (FIX_2D/FIX_3D/UNKNOWN)
+  - Added `gps_timestamp` and `gps_age_seconds` for GPS freshness monitoring
+  - Added `motion_state` field for future motion tracking (Regenerating/Propelling/Coasting)
+  - Implemented per-signal timestamp tracking (8 fields) for temporal contradiction analysis
+  - Deployed migrations 011-016 to production database
+- **UI Components**:
+  - Created `ParkingIndicator` component with orange P-in-circle icon
+  - Integrated parking brake indicator into vehicle cards
+  - Added `IgnitionIndicator` and `MotionStatus` components
+- **Data Flow**:
+  - 2 of 4 new features actively ingesting: `is_parked` and `gps_fix_quality`
+  - GPS timestamp fields pending SAIC API data availability
+  - MQTT handlers implemented for all new topics in ingestion service
+
+#### 2025-11-03: Charging Intelligence & UI Polish
+- **Enhanced Charging Telemetry**: Derived state detection (Charging|Plugged|Disconnected) using multiple signals, SAIC sign convention (negative = charging), real-time metrics (power, current, voltage), color-coded indicators (migration: `010_add_charging_plug_status.sql`)
 - Added Google Maps integration with vector tiles and 3D controls
 - Implemented event logging system with database triggers
 - Added Logs view with filtering and real-time updates
@@ -675,4 +749,4 @@ For detailed troubleshooting, see [`command-system.md`](/Users/markau/mtc-ismart
 
 ---
 
-*Last Updated: 2025-11-03*
+*Last Updated: 2025-11-04*
