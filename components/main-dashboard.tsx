@@ -1,16 +1,35 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, createContext, useContext } from "react"
 import { useTheme } from "next-themes"
 import { useVehicles } from "@/hooks/use-vehicle"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Logo } from "@/components/logo"
-import { RefreshCw, Sun, Moon, Car, Map, FileText } from "lucide-react"
+import { RefreshCw, Sun, Moon, Car, Map, FileText, Gauge } from "lucide-react"
 import VehicleCardsView from "@/components/vehicle-cards-view"
 import MapView from "@/components/map-view"
 import LogsView from "@/components/logs-view"
+
+type SpeedUnit = "kmh" | "mph"
+
+interface SpeedUnitContextType {
+  speedUnit: SpeedUnit
+  setSpeedUnit: (unit: SpeedUnit) => void
+  convertSpeed: (speedKmh: number | null) => number | null
+  getSpeedLabel: () => string
+}
+
+const SpeedUnitContext = createContext<SpeedUnitContextType | undefined>(undefined)
+
+export const useSpeedUnit = () => {
+  const context = useContext(SpeedUnitContext)
+  if (!context) {
+    throw new Error("useSpeedUnit must be used within SpeedUnitProvider")
+  }
+  return context
+}
 
 export default function MainDashboard() {
   const { vehicles, loading, error, refetch } = useVehicles()
@@ -18,6 +37,35 @@ export default function MainDashboard() {
   const [refreshing, setRefreshing] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [activeTab, setActiveTab] = useState("cars")
+  const [speedUnit, setSpeedUnit] = useState<SpeedUnit>("kmh")
+
+  // Load speed unit preference from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("speedUnit")
+    if (saved === "mph" || saved === "kmh") {
+      setSpeedUnit(saved)
+    }
+  }, [])
+
+  // Save speed unit preference to localStorage
+  const handleSpeedUnitChange = (unit: SpeedUnit) => {
+    setSpeedUnit(unit)
+    localStorage.setItem("speedUnit", unit)
+  }
+
+  const convertSpeed = (speedKmh: number | null): number | null => {
+    if (speedKmh === null) return null
+    return speedUnit === "mph" ? speedKmh * 0.621371 : speedKmh
+  }
+
+  const getSpeedLabel = () => speedUnit === "mph" ? "mph" : "km/h"
+
+  const speedUnitContext: SpeedUnitContextType = {
+    speedUnit,
+    setSpeedUnit: handleSpeedUnitChange,
+    convertSpeed,
+    getSpeedLabel,
+  }
 
   // Prevent hydration mismatch with theme
   useEffect(() => {
@@ -54,9 +102,10 @@ export default function MainDashboard() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b bg-card">
+    <SpeedUnitContext.Provider value={speedUnitContext}>
+      <div className="flex flex-col h-screen bg-background">
+        {/* Header */}
+        <header className="sticky top-0 z-50 border-b bg-card">
         <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
           <div className="flex items-center gap-2 md:gap-4">
             <div className="logo-hover">
@@ -76,6 +125,17 @@ export default function MainDashboard() {
           </div>
 
           <div className="flex items-center gap-1 md:gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => handleSpeedUnitChange(speedUnit === "kmh" ? "mph" : "kmh")}
+              className="smooth-transition"
+              title="Toggle speed unit"
+            >
+              <Gauge className="h-4 w-4 mr-1" />
+              <span className="text-xs font-medium">{speedUnit === "kmh" ? "km/h" : "mph"}</span>
+            </Button>
+
             <Button
               variant="ghost"
               size="icon"
@@ -142,6 +202,7 @@ export default function MainDashboard() {
           </TabsContent>
         </Tabs>
       </main>
-    </div>
+      </div>
+    </SpeedUnitContext.Provider>
   )
 }
