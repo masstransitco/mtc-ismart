@@ -1,3 +1,5 @@
+"use client"
+
 import { Card } from "@/components/ui/card"
 import { VehicleStatus } from "@/hooks/use-vehicle"
 import { VehicleStatusBadge } from "./status-badge"
