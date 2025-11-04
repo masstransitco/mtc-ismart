@@ -1,3 +1,5 @@
+"use client"
+
 import { ArrowDown, ArrowUp, Minus } from "lucide-react"
 import { useSpeedUnit } from "@/components/main-dashboard"
 
