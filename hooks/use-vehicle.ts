@@ -73,7 +73,8 @@ export function useVehicle(vin: string) {
     if (!vin) return
 
     const supabase = createBrowserClient()
-    let channel: RealtimeChannel
+    let channel: RealtimeChannel | null = null
+    let isSubscribed = true
 
     async function fetchStatus() {
       try {
@@ -85,13 +86,19 @@ export function useVehicle(vin: string) {
 
         if (fetchError) throw fetchError
 
-        setStatus(data)
-        setError(null)
+        if (isSubscribed) {
+          setStatus(data)
+          setError(null)
+        }
       } catch (err) {
         console.error('[useVehicle] Error fetching status:', err)
-        setError(err instanceof Error ? err.message : 'Unknown error')
+        if (isSubscribed) {
+          setError(err instanceof Error ? err.message : 'Unknown error')
+        }
       } finally {
-        setLoading(false)
+        if (isSubscribed) {
+          setLoading(false)
+        }
       }
     }
 
@@ -110,25 +117,34 @@ export function useVehicle(vin: string) {
         },
         (payload) => {
           console.log('[useVehicle] Realtime update:', payload)
-          setStatus((prev) => ({ ...prev, ...payload.new } as VehicleStatus))
+          if (isSubscribed) {
+            setStatus((prev) => ({ ...prev, ...payload.new } as VehicleStatus))
+          }
         }
       )
       .subscribe((status) => {
+        if (!isSubscribed) return
+
         if (status === 'SUBSCRIBED') {
           console.log(`[useVehicle] ✓ Realtime subscribed for vehicle ${vin}`)
+          // Clear any previous errors when successfully connected
+          setError(null)
         } else if (status === 'CHANNEL_ERROR') {
           console.error(`[useVehicle] ❌ Realtime error for vehicle ${vin}`)
-          setError('Realtime connection failed')
+          // Don't set error state for realtime issues - data is still available
         } else if (status === 'TIMED_OUT') {
           console.error(`[useVehicle] ⏱️  Realtime timeout for vehicle ${vin}`)
-          setError('Realtime connection timed out')
+          // Don't set error state for realtime issues - data is still available
         } else if (status === 'CLOSED') {
           console.log(`[useVehicle] Realtime connection closed for vehicle ${vin}`)
         }
       })
 
     return () => {
-      supabase.removeChannel(channel)
+      isSubscribed = false
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [vin])
 
@@ -142,7 +158,8 @@ export function useVehicles() {
 
   useEffect(() => {
     const supabase = createBrowserClient()
-    let channel: RealtimeChannel
+    let channel: RealtimeChannel | null = null
+    let isSubscribed = true
 
     async function fetchVehicles() {
       try {
@@ -153,13 +170,19 @@ export function useVehicles() {
 
         if (fetchError) throw fetchError
 
-        setVehicles(data || [])
-        setError(null)
+        if (isSubscribed) {
+          setVehicles(data || [])
+          setError(null)
+        }
       } catch (err) {
         console.error('[useVehicles] Error fetching vehicles:', err)
-        setError(err instanceof Error ? err.message : 'Unknown error')
+        if (isSubscribed) {
+          setError(err instanceof Error ? err.message : 'Unknown error')
+        }
       } finally {
-        setLoading(false)
+        if (isSubscribed) {
+          setLoading(false)
+        }
       }
     }
 
@@ -177,6 +200,8 @@ export function useVehicles() {
         },
         (payload) => {
           console.log('[useVehicles] Realtime update:', payload)
+
+          if (!isSubscribed) return
 
           if (payload.eventType === 'INSERT') {
             setVehicles((prev) => [payload.new as VehicleStatus, ...prev])
@@ -196,21 +221,28 @@ export function useVehicles() {
         }
       )
       .subscribe((status) => {
+        if (!isSubscribed) return
+
         if (status === 'SUBSCRIBED') {
           console.log('[useVehicles] ✓ Realtime subscribed for all vehicles')
+          // Clear any previous errors when successfully connected
+          setError(null)
         } else if (status === 'CHANNEL_ERROR') {
           console.error('[useVehicles] ❌ Realtime error')
-          setError('Realtime connection failed')
+          // Don't set error state for realtime issues - data is still available
         } else if (status === 'TIMED_OUT') {
           console.error('[useVehicles] ⏱️  Realtime timeout')
-          setError('Realtime connection timed out')
+          // Don't set error state for realtime issues - data is still available
         } else if (status === 'CLOSED') {
           console.log('[useVehicles] Realtime connection closed')
         }
       })
 
     return () => {
-      supabase.removeChannel(channel)
+      isSubscribed = false
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
     }
   }, [])
 
