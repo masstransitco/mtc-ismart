@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useTheme } from "next-themes"
-import { APIProvider, Map, AdvancedMarker, Pin, InfoWindow } from "@vis.gl/react-google-maps"
+import { APIProvider, Map, AdvancedMarker, InfoWindow } from "@vis.gl/react-google-maps"
 import { useVehicles } from "@/hooks/use-vehicle"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
@@ -27,16 +27,52 @@ function VehicleMarker({ vehicle, onClick, isDarkMode }: VehicleMarkerProps) {
 
   if (!vehicle.lat || !vehicle.lon) return null
 
+  // Bearing is 0-359 degrees where 0 is North
+  // SVG rotation needs to account for the arrow pointing up by default
+  const rotation = vehicle.bearing ?? 0
+
   return (
     <AdvancedMarker
       position={{ lat: vehicle.lat, lng: vehicle.lon }}
       onClick={onClick}
     >
-      <Pin
-        background={getMarkerColor()}
-        glyphColor="#fff"
-        borderColor={isDarkMode ? "#fff" : "#000"}
-      />
+      <div
+        style={{
+          transform: `rotate(${rotation}deg)`,
+          transformOrigin: 'center center',
+          width: '32px',
+          height: '32px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+        }}
+      >
+        <svg
+          width="32"
+          height="32"
+          viewBox="0 0 32 32"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          {/* Arrow cursor shape */}
+          <path
+            d="M16 4 L24 28 L16 24 L8 28 Z"
+            fill={getMarkerColor()}
+            stroke={isDarkMode ? "#fff" : "#000"}
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+          {/* Center dot for better visibility */}
+          <circle
+            cx="16"
+            cy="18"
+            r="2"
+            fill="#fff"
+            opacity="0.8"
+          />
+        </svg>
+      </div>
     </AdvancedMarker>
   )
 }
