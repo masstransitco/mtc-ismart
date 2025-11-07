@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Logo } from "@/components/logo"
-import { RefreshCw, Sun, Moon, Car, Map, FileText, Gauge } from "lucide-react"
+import { RefreshCw, Sun, Moon, Car, Map, FileText, Gauge, TrendingUp } from "lucide-react"
 import VehicleCardsView from "@/components/vehicle-cards-view"
 import MapView from "@/components/map-view"
 import LogsView from "@/components/logs-view"
+import TripsView from "@/components/trips-view"
 
 type SpeedUnit = "kmh" | "mph"
 
@@ -166,7 +167,7 @@ export default function MainDashboard() {
         {/* Navigation Tabs */}
         <div className="px-4 md:px-6">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 max-w-md">
+            <TabsList className="grid w-full grid-cols-4 max-w-2xl">
               <TabsTrigger value="cars" className="flex items-center gap-2">
                 <Car className="w-4 h-4" />
                 <span className="hidden sm:inline">Cars</span>
@@ -174,6 +175,10 @@ export default function MainDashboard() {
               <TabsTrigger value="map" className="flex items-center gap-2">
                 <Map className="w-4 h-4" />
                 <span className="hidden sm:inline">Map</span>
+              </TabsTrigger>
+              <TabsTrigger value="trips" className="flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" />
+                <span className="hidden sm:inline">Trips</span>
               </TabsTrigger>
               <TabsTrigger value="logs" className="flex items-center gap-2">
                 <FileText className="w-4 h-4" />
@@ -195,6 +200,10 @@ export default function MainDashboard() {
 
           <TabsContent value="map" className="h-full m-0">
             <MapView />
+          </TabsContent>
+
+          <TabsContent value="trips" className="h-full m-0">
+            <TripsView />
           </TabsContent>
 
           <TabsContent value="logs" className="h-full m-0">
