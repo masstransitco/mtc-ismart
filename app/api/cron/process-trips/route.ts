@@ -8,10 +8,14 @@ export const maxDuration = 300; // 5 minutes max execution time
  * Process trips incrementally using the v1.1 jitter-aware algorithm
  * This endpoint is designed to be called by Vercel Cron
  *
+ * Uses checkpoint-based incremental processing to only process new telemetry data
+ * since the last successful run, avoiding expensive full 24-hour scans.
+ *
  * Query params:
- * - hours: number of hours to look back (default: 24)
  * - vin: specific VIN to process (default: all)
  * - secret: authentication token (required)
+ * - legacy: set to "true" to use old hours-based lookback (default: false)
+ * - hours: number of hours to look back (only used with legacy=true, default: 24)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -38,13 +42,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Parse query parameters
-    const hoursBack = parseInt(request.nextUrl.searchParams.get('hours') || '24');
     const specificVin = request.nextUrl.searchParams.get('vin');
-
-    // Calculate since timestamp
-    const sinceTimestamp = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
-
-    console.log(`[CRON] Processing trips since ${sinceTimestamp.toISOString()}`);
+    const useLegacyMode = request.nextUrl.searchParams.get('legacy') === 'true';
+    const hoursBack = parseInt(request.nextUrl.searchParams.get('hours') || '24');
 
     const supabase = createClient();
 
@@ -53,10 +53,12 @@ export async function GET(request: NextRequest) {
     if (specificVin) {
       vins = [specificVin];
     } else {
+      // Get all VINs with recent telemetry (last 6 hours to catch active vehicles)
+      const recentCutoff = new Date(Date.now() - 6 * 60 * 60 * 1000);
       const { data: vehicleData, error: vehicleError } = await supabase
         .from('vehicle_telemetry')
         .select('vin')
-        .gte('ts', sinceTimestamp.toISOString())
+        .gte('ts', recentCutoff.toISOString())
         .limit(1000);
 
       if (vehicleError) {
@@ -64,6 +66,12 @@ export async function GET(request: NextRequest) {
       }
 
       vins = [...new Set(vehicleData?.map(v => v.vin) || [])];
+    }
+
+    console.log(`[CRON] Processing ${vins.length} vehicles (mode: ${useLegacyMode ? 'legacy' : 'incremental'})`);
+    if (useLegacyMode) {
+      const sinceTimestamp = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+      console.log(`[CRON] Legacy mode: looking back ${hoursBack} hours to ${sinceTimestamp.toISOString()}`);
     }
 
     if (vins.length === 0) {
@@ -74,19 +82,31 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`[CRON] Processing ${vins.length} vehicles: ${vins.join(', ')}`);
-
     // Process each VIN using the database function
     const results = [];
     for (const vin of vins) {
       try {
         const startTime = Date.now();
 
-        // Call the derive_trips function for this VIN
-        const { data, error } = await supabase.rpc('derive_trips', {
-          vin_in: vin,
-          since_ts: sinceTimestamp.toISOString(),
-        });
+        let data, error;
+
+        if (useLegacyMode) {
+          // Legacy mode: use hours-based lookback
+          const sinceTimestamp = new Date(Date.now() - hoursBack * 60 * 60 * 1000);
+          const response = await supabase.rpc('derive_trips', {
+            vin_in: vin,
+            since_ts: sinceTimestamp.toISOString(),
+          });
+          data = response.data;
+          error = response.error;
+        } else {
+          // Incremental mode: use checkpoint-based processing
+          const response = await supabase.rpc('derive_trips_incremental', {
+            vin_in: vin,
+          });
+          data = response.data;
+          error = response.error;
+        }
 
         const duration = Date.now() - startTime;
 
@@ -99,13 +119,26 @@ export async function GET(request: NextRequest) {
             duration_ms: duration,
           });
         } else {
-          const tripsCreated = data || 0;
-          console.log(`[CRON] ✓ Processed ${vin}: ${tripsCreated} trips created in ${duration}ms`);
+          let tripsCreated: number;
+          let timeRange: { start?: string; end?: string } = {};
+
+          if (useLegacyMode) {
+            tripsCreated = data || 0;
+          } else {
+            // Incremental mode returns array with single row: [trips_created, time_range_start, time_range_end]
+            const result = Array.isArray(data) && data.length > 0 ? data[0] : null;
+            tripsCreated = result?.trips_created || 0;
+            if (result?.time_range_start) timeRange.start = result.time_range_start;
+            if (result?.time_range_end) timeRange.end = result.time_range_end;
+          }
+
+          console.log(`[CRON] ✓ Processed ${vin}: ${tripsCreated} trips created in ${duration}ms${timeRange.start ? ` (${timeRange.start} to ${timeRange.end})` : ''}`);
           results.push({
             vin,
             success: true,
             trips_created: tripsCreated,
             duration_ms: duration,
+            ...(timeRange.start && { time_range: timeRange }),
           });
         }
       } catch (err) {
@@ -132,9 +165,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      mode: useLegacyMode ? 'legacy' : 'incremental',
       summary,
       results,
-      since: sinceTimestamp.toISOString(),
       processedAt: new Date().toISOString(),
     });
 
