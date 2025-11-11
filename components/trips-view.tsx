@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { RefreshCw, TrendingUp } from "lucide-react"
+import { useTheme } from "next-themes"
 
 export default function TripsView() {
   const [selectedVin, setSelectedVin] = useState<string>("all")
@@ -22,6 +23,9 @@ export default function TripsView() {
 
   const { vehicles } = useVehicles()
   const { vehicleStats, loading, error, refetch } = useTrips(selectedVin, selectedTimeRange)
+  const { theme, systemTheme } = useTheme()
+  const currentTheme = theme === 'system' ? systemTheme : theme
+  const isDark = currentTheme === 'dark'
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -56,52 +60,48 @@ export default function TripsView() {
   return (
     <div className="flex flex-col h-full">
       {/* Filters */}
-      <div className="sticky top-0 z-10 bg-background border-b p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-              <TrendingUp className="h-6 w-6 text-primary" />
-              Trips
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {totalTrips} trip{totalTrips !== 1 ? "s" : ""} • {getTimeRangeLabel(selectedTimeRange)}
-            </p>
+      <div className="sticky top-0 z-10 bg-background border-b p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div className="text-sm text-muted-foreground">
+            {totalTrips} trip{totalTrips !== 1 ? "s" : ""} • {getTimeRangeLabel(selectedTimeRange)}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <Select value={selectedVin} onValueChange={setSelectedVin}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All vehicles" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Vehicles</SelectItem>
+                  {vehicles.map((vehicle) => (
+                    <SelectItem key={vehicle.vin} value={vehicle.vin}>
+                      {vehicle.vehicles?.label || vehicle.vehicles?.plate_number || vehicle.vin}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select value={selectedVin} onValueChange={setSelectedVin}>
-            <SelectTrigger>
-              <SelectValue placeholder="All vehicles" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Vehicles</SelectItem>
-              {vehicles.map((vehicle) => (
-                <SelectItem key={vehicle.vin} value={vehicle.vin}>
-                  {vehicle.vehicles?.label || vehicle.vehicles?.plate_number || vehicle.vin}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Select time range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="24h">Last 24 Hours</SelectItem>
+                  <SelectItem value="7d">Last 7 Days</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-          <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select time range" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="24h">Last 24 Hours</SelectItem>
-              <SelectItem value="7d">Last 7 Days</SelectItem>
-            </SelectContent>
-          </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
       </div>
 

@@ -15,6 +15,7 @@ import { FindMyCarControls } from "./find-my-car-controls"
 import { getVehicleStatus } from "@/lib/vehicle-status"
 import { cn } from "@/lib/utils"
 import { useSpeedUnit } from "@/components/main-dashboard"
+import { useTheme } from "next-themes"
 import {
   Battery,
   Navigation,
@@ -56,17 +57,49 @@ export function VehicleCard({
 }: VehicleCardProps) {
   const status = getVehicleStatus(vehicle)
   const { convertSpeed, getSpeedLabel } = useSpeedUnit()
+  const { theme, systemTheme } = useTheme()
+  const currentTheme = theme === 'system' ? systemTheme : theme
+  const isDark = currentTheme === 'dark'
+
+  // Generate gradient based on status and theme
+  const getBackgroundGradient = () => {
+    const lightBase = 'linear-gradient(to bottom right, hsl(210 20% 98% / 0.5), hsl(214 32% 96% / 0.6), hsl(220 13% 95% / 0.4))'
+    const darkBase = 'linear-gradient(to bottom right, hsl(222 47% 8% / 0.9), hsl(217 33% 15% / 0.4), hsl(217 33% 17% / 0.6))'
+
+    if (isDark) {
+      switch (status) {
+        case "charging":
+          return 'linear-gradient(to bottom right, hsl(142 76% 36% / 0.15), hsl(217 33% 15% / 0.4), hsl(217 33% 17% / 0.6))'
+        case "charged":
+          return 'linear-gradient(to bottom right, hsl(221 83% 53% / 0.15), hsl(217 33% 15% / 0.4), hsl(217 33% 17% / 0.6))'
+        case "driving":
+          return 'linear-gradient(to bottom right, hsl(32 95% 44% / 0.15), hsl(217 33% 15% / 0.4), hsl(217 33% 17% / 0.6))'
+        default:
+          return darkBase
+      }
+    } else {
+      switch (status) {
+        case "charging":
+          return 'linear-gradient(to bottom right, hsl(142 76% 95% / 0.6), hsl(214 32% 96% / 0.6), hsl(220 13% 95% / 0.4))'
+        case "charged":
+          return 'linear-gradient(to bottom right, hsl(221 83% 95% / 0.6), hsl(214 32% 96% / 0.6), hsl(220 13% 95% / 0.4))'
+        case "driving":
+          return 'linear-gradient(to bottom right, hsl(32 95% 95% / 0.6), hsl(214 32% 96% / 0.6), hsl(220 13% 95% / 0.4))'
+        default:
+          return lightBase
+      }
+    }
+  }
 
   return (
     <Card className={cn(
-      "p-4 md:p-6 cursor-pointer card-hover animate-fade-in",
+      "p-4 md:p-6 cursor-pointer card-hover animate-fade-in border-border",
       {
-        "bg-gradient-to-br from-success/5 via-card to-card border-success/20": status === "charging",
-        "bg-gradient-to-br from-info/5 via-card to-card border-info/20": status === "charged",
-        "bg-gradient-to-br from-warning/5 via-card to-card border-warning/20": status === "driving",
-        "bg-card border-border": status === "parked",
+        "border-success/20": status === "charging",
+        "border-info/20": status === "charged",
+        "border-warning/20": status === "driving",
       }
-    )}>
+    )} style={{ background: getBackgroundGradient() }}>
       <div className="space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4">

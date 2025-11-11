@@ -1,22 +1,21 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { VehicleTripStats } from "@/hooks/use-trips"
 import { VehicleStatus } from "@/hooks/use-vehicle"
 import { useSpeedUnit } from "@/components/main-dashboard"
 import {
-  TrendingUp,
   Clock,
-  Navigation,
   Car,
   ChevronDown,
   ChevronUp,
 } from "lucide-react"
+import { RouteIcon } from "@/components/icons/route"
 import { formatDistanceToNow, format } from "date-fns"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { useTheme } from "next-themes"
 
 interface TripVehicleCardProps {
   stats: VehicleTripStats
@@ -26,6 +25,9 @@ interface TripVehicleCardProps {
 export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
   const { convertSpeed, getSpeedLabel, speedUnit } = useSpeedUnit()
   const [expanded, setExpanded] = useState(false)
+  const { theme, systemTheme } = useTheme()
+  const currentTheme = theme === 'system' ? systemTheme : theme
+  const isDark = currentTheme === 'dark'
 
   // Format duration (seconds to hours/minutes)
   const formatDuration = (seconds: number): string => {
@@ -47,9 +49,9 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
     return `${km.toFixed(1)} km`
   }
 
-  // Get top 5 trips by distance for visualization
+  // Get top 5 trips by chronological order (most recent first)
   const topTrips = [...stats.trips]
-    .sort((a, b) => b.distance_fused_m - a.distance_fused_m)
+    .sort((a, b) => new Date(b.start_ts).getTime() - new Date(a.start_ts).getTime())
     .slice(0, 5)
 
   const maxDistance = topTrips[0]?.distance_fused_m || 1
@@ -69,14 +71,29 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
                       stats.vin.slice(-8)
 
   return (
-    <Card className="overflow-hidden card-hover animate-fade-in">
-      <CardHeader className="pb-3">
+    <div className="relative overflow-hidden rounded-lg border border-border shadow-sm card-hover animate-fade-in" style={{
+      background: isDark
+        ? 'linear-gradient(to bottom right, hsl(222 47% 8% / 0.9), hsl(217 33% 15% / 0.4), hsl(217 33% 17% / 0.6))'
+        : 'linear-gradient(to bottom right, hsl(210 20% 98% / 0.5), hsl(214 32% 96% / 0.6), hsl(220 13% 95% / 0.4))'
+    }}>
+      <div className="relative">
+      <div className="flex flex-col space-y-1.5 p-6 pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-lg font-semibold flex items-center gap-2 mb-1">
-              <Car className="h-5 w-5 text-primary shrink-0" />
-              <span className="truncate">{vehicleName}</span>
-            </CardTitle>
+            <div className="flex items-center gap-3 mb-2">
+              {vehicleInfo?.vehicles?.plate_number && (
+                <div className="inline-flex items-center justify-center px-3 py-1.5 bg-gradient-to-b from-white to-gray-50 border-2 border-slate-800 rounded-md shadow-sm">
+                  <span className="text-base font-bold tracking-wider text-slate-900 font-mono">
+                    {vehicleInfo.vehicles.plate_number}
+                  </span>
+                </div>
+              )}
+              {!vehicleInfo?.vehicles?.plate_number && (
+                <div className="text-lg font-semibold">
+                  {vehicleName}
+                </div>
+              )}
+            </div>
             {vehicleInfo?.vehicles?.model && (
               <p className="text-sm text-muted-foreground">
                 {vehicleInfo.vehicles.model}
@@ -84,27 +101,23 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
               </p>
             )}
           </div>
-          <Badge variant="secondary" className="shrink-0 text-lg px-3 py-1">
-            {stats.tripCount}
+          <Badge variant="secondary" className="shrink-0 text-lg px-3 py-1 flex items-center gap-1.5">
+            <span>{stats.tripCount}</span>
+            <span className="text-xs font-normal">Trips</span>
           </Badge>
         </div>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-4">
+      <div className="p-6 pt-0 space-y-4">
         {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="flex flex-col items-center text-center p-2 rounded-lg bg-muted/50">
-            <TrendingUp className="h-4 w-4 text-primary mb-1" />
-            <div className="text-xs text-muted-foreground mb-0.5">Trips</div>
-            <div className="text-lg font-semibold">{stats.tripCount}</div>
-          </div>
+        <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col items-center text-center p-2 rounded-lg bg-muted/50">
             <Clock className="h-4 w-4 text-blue-500 mb-1" />
-            <div className="text-xs text-muted-foreground mb-0.5">Total Time</div>
+            <div className="text-xs text-muted-foreground mb-0.5">Total Duration</div>
             <div className="text-lg font-semibold">{formatDuration(stats.totalDuration)}</div>
           </div>
           <div className="flex flex-col items-center text-center p-2 rounded-lg bg-muted/50">
-            <Navigation className="h-4 w-4 text-green-500 mb-1" />
+            <RouteIcon className="h-4 w-4 text-green-500 mb-1" />
             <div className="text-xs text-muted-foreground mb-0.5">Total Dist</div>
             <div className="text-lg font-semibold">{formatDistance(stats.totalDistance)}</div>
           </div>
@@ -114,7 +127,7 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
         {topTrips.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-muted-foreground">Top Trips by Distance</h4>
+              <h4 className="text-sm font-medium text-muted-foreground">Recent Trips</h4>
               <div className="flex items-center gap-3 text-xs">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded-sm bg-gradient-to-r from-green-500 to-green-600"></div>
@@ -138,7 +151,7 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
                   <div className="space-y-0.5">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-1.5">
-                        <Navigation className="h-3 w-3 text-green-500" />
+                        <RouteIcon className="h-3 w-3 text-green-500" />
                         <span className="text-muted-foreground">Distance</span>
                       </div>
                       <span className="font-medium">
@@ -214,7 +227,9 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
 
             {expanded && (
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {stats.trips.map((trip) => (
+                {[...stats.trips]
+                  .sort((a, b) => new Date(b.start_ts).getTime() - new Date(a.start_ts).getTime())
+                  .map((trip) => (
                   <div
                     key={trip.trip_id}
                     className="p-3 rounded-lg border border-border/50 text-xs space-y-1"
@@ -242,7 +257,8 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+      </div>
+    </div>
   )
 }
