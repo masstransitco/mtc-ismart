@@ -7,23 +7,23 @@
   "regions": ["hkg1"],
   "crons": [
     {
-      "path": "/api/cron/process-trips?vin=LSJWH4092PN070118&hours=1",
+      "path": "/api/cron/process-trips?vin=LSJWH4092PN070118&legacy=true&hours=1",
       "schedule": "0 * * * *"
     },
     {
-      "path": "/api/cron/process-trips?vin=LSJWH4092PN070121&hours=1",
+      "path": "/api/cron/process-trips?vin=LSJWH4092PN070121&legacy=true&hours=1",
       "schedule": "5 * * * *"
     },
     {
-      "path": "/api/cron/process-trips?vin=LSJWH4098PN070110&hours=1",
+      "path": "/api/cron/process-trips?vin=LSJWH4098PN070110&legacy=true&hours=1",
       "schedule": "10 * * * *"
     },
     {
-      "path": "/api/cron/process-trips?vin=LSJWH4098PN070124&hours=1",
+      "path": "/api/cron/process-trips?vin=LSJWH4098PN070124&legacy=true&hours=1",
       "schedule": "15 * * * *"
     },
     {
-      "path": "/api/cron/process-trips?vin=LSJWH409XPN070089&hours=1",
+      "path": "/api/cron/process-trips?vin=LSJWH409XPN070089&legacy=true&hours=1",
       "schedule": "20 * * * *"
     }
   ]
