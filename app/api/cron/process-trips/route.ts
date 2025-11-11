@@ -83,7 +83,16 @@ export async function GET(request: NextRequest) {
     }
 
     // Process each VIN using the database function
-    const results = [];
+    type ProcessResult = {
+      vin: string;
+      success: boolean;
+      trips_created?: number;
+      duration_ms?: number;
+      error?: string;
+      time_range?: { start?: string; end?: string };
+    };
+
+    const results: ProcessResult[] = [];
     for (const vin of vins) {
       try {
         const startTime = Date.now();
