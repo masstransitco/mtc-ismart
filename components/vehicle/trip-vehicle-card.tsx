@@ -54,7 +54,7 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
     .sort((a, b) => new Date(b.start_ts).getTime() - new Date(a.start_ts).getTime())
     .slice(0, 5)
 
-  const maxDistance = topTrips[0]?.distance_fused_m || 1
+  const maxDistance = Math.max(...topTrips.map(t => t.distance_fused_m), 1)
   const maxDuration = Math.max(...topTrips.map(t => t.duration_s), 1)
 
   // Format timestamp with relative time
@@ -149,11 +149,8 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
 
                   {/* Distance Bar */}
                   <div className="space-y-0.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <RouteIcon className="h-3 w-3 text-green-500" />
-                        <span className="text-muted-foreground">Distance</span>
-                      </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <RouteIcon className="h-3 w-3 text-green-500" />
                       <span className="font-medium">
                         {formatDistance(trip.distance_fused_m)}
                       </span>
@@ -168,11 +165,8 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
 
                   {/* Duration Bar */}
                   <div className="space-y-0.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="h-3 w-3 text-blue-500" />
-                        <span className="text-muted-foreground">Duration</span>
-                      </div>
+                    <div className="flex items-center gap-1.5 text-xs">
+                      <Clock className="h-3 w-3 text-blue-500" />
                       <span className="font-medium">
                         {formatDuration(trip.duration_s)}
                       </span>
