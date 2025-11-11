@@ -40,6 +40,8 @@ def process_vehicle_trips(vin, since_date='2025-10-28'):
           AND ts >= %s::timestamptz
           AND lat IS NOT NULL
           AND lon IS NOT NULL
+          AND lat != 0  -- Exclude POINT(0,0) coordinates
+          AND lon != 0  -- These represent GPS signal loss
         ORDER BY ts
     """
     cur.execute(query, (vin, since_date))
