@@ -9,6 +9,8 @@ import {
   Car,
   ChevronDown,
   ChevronUp,
+  Play,
+  Loader2,
 } from "lucide-react"
 import { RouteIcon } from "@/components/icons/route"
 import { CursorIcon } from "@/components/icons/cursor"
@@ -29,6 +31,7 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [selectedTripId, setSelectedTripId] = useState<number | null>(null)
   const [mapModalOpen, setMapModalOpen] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const { theme, systemTheme } = useTheme()
   const currentTheme = theme === 'system' ? systemTheme : theme
   const isDark = currentTheme === 'dark'
@@ -36,6 +39,25 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
   const handleShowMap = (tripId: number) => {
     setSelectedTripId(tripId)
     setMapModalOpen(true)
+  }
+
+  const handleProcessTrips = async () => {
+    setIsProcessing(true)
+    try {
+      const response = await fetch(
+        `/api/cron/process-trips?secret=${process.env.NEXT_PUBLIC_CRON_SECRET}&vin=${stats.vin}&legacy=true&hours=2`
+      )
+      const data = await response.json()
+
+      if (data.success && data.results?.[0]?.trips_created > 0) {
+        // Reload the page to show new trips
+        window.location.reload()
+      }
+    } catch (error) {
+      console.error('Failed to process trips:', error)
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   // Format duration (seconds to hours/minutes)
@@ -110,10 +132,26 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
               </p>
             )}
           </div>
-          <Badge variant="secondary" className="shrink-0 text-lg px-3 py-1 flex items-center gap-1.5">
-            <span>{stats.tripCount}</span>
-            <span className="text-xs font-normal">Trips</span>
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="shrink-0 text-lg px-3 py-1 flex items-center gap-1.5">
+              <span>{stats.tripCount}</span>
+              <span className="text-xs font-normal">Trips</span>
+            </Badge>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 hover:bg-primary/10"
+              onClick={handleProcessTrips}
+              disabled={isProcessing}
+              title="Process new trips"
+            >
+              {isProcessing ? (
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              ) : (
+                <Play className="h-4 w-4 text-primary" />
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
