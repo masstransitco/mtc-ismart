@@ -6,7 +6,8 @@ import { APIProvider, Map, AdvancedMarker, InfoWindow } from "@vis.gl/react-goog
 import { useVehicles } from "@/hooks/use-vehicle"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
-import { Battery, Gauge, Thermometer, MapPin } from "lucide-react"
+import { Battery, Gauge, Thermometer, MapPin, Loader2, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 import { VehicleStatus } from "@/hooks/use-vehicle"
 
@@ -78,7 +79,7 @@ function VehicleMarker({ vehicle, onClick, isDarkMode }: VehicleMarkerProps) {
 }
 
 export default function MapView() {
-  const { vehicles } = useVehicles()
+  const { vehicles, loading, error, refetch } = useVehicles()
   const { theme } = useTheme()
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -310,11 +311,35 @@ export default function MapView() {
         </Map>
       </APIProvider>
 
-      {vehicles.filter(v => v.lat && v.lon).length === 0 && (
+      {/* Loading state */}
+      {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="text-center space-y-2">
-            <MapPin className="w-12 h-12 mx-auto text-muted-foreground" />
-            <p className="text-muted-foreground">No vehicle locations available</p>
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {/* Error or no vehicles state */}
+      {!loading && (error || vehicles.filter(v => v.lat && v.lon).length === 0) && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="text-center space-y-4">
+            <MapPin className="w-12 h-12 mx-auto text-muted-foreground/50" />
+            <div className="space-y-2">
+              <p className="text-lg font-medium text-foreground">
+                Unable to establish connection
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {error || "No vehicle locations available"}
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={refetch}
+              className="gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </Button>
           </div>
         </div>
       )}

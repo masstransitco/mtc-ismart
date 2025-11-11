@@ -5,10 +5,11 @@ import { useVehicles } from "@/hooks/use-vehicle"
 import { useToast } from "@/hooks/use-toast"
 import { VehicleCard } from "@/components/vehicle"
 import { reverseGeocode } from "@/lib/geocoding"
-import { Car } from "lucide-react"
+import { Car, Loader2, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 export default function VehicleCardsView() {
-  const { vehicles } = useVehicles()
+  const { vehicles, loading, error, refetch } = useVehicles()
   const [locations, setLocations] = useState<Record<string, string>>({})
   const [targetTemps, setTargetTemps] = useState<Record<string, number>>({})
   const [showClimateControls, setShowClimateControls] = useState<Record<string, boolean>>({})
@@ -233,14 +234,37 @@ export default function VehicleCardsView() {
     return `${Math.floor(diffMins / 1440)}d ago`
   }
 
-  if (vehicles.length === 0) {
+  // Show loading spinner while fetching data
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  // Show error state with retry button
+  if (error || vehicles.length === 0) {
     return (
       <div className="text-center space-y-4 py-12">
-        <Car className="w-16 h-16 mx-auto text-muted-foreground" />
-        <p className="text-muted-foreground">No vehicles found</p>
-        <p className="text-sm text-muted-foreground">
-          Add a vehicle to get started
-        </p>
+        <Car className="w-16 h-16 mx-auto text-muted-foreground/50" />
+        <div className="space-y-2">
+          <p className="text-lg font-medium text-foreground">
+            Unable to establish connection
+          </p>
+          <p className="text-sm text-muted-foreground">
+            {error || "No vehicles available"}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={refetch}
+          className="gap-2"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Retry
+        </Button>
       </div>
     )
   }
