@@ -9,6 +9,7 @@ import {
   Car,
   ChevronDown,
   ChevronUp,
+  MapPin,
 } from "lucide-react"
 import { RouteIcon } from "@/components/icons/route"
 import { formatDistanceToNow, format } from "date-fns"
@@ -16,6 +17,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { useTheme } from "next-themes"
+import { TripMapModal } from "@/components/trip-map-modal"
 
 interface TripVehicleCardProps {
   stats: VehicleTripStats
@@ -25,9 +27,16 @@ interface TripVehicleCardProps {
 export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
   const { convertSpeed, getSpeedLabel, speedUnit } = useSpeedUnit()
   const [expanded, setExpanded] = useState(false)
+  const [selectedTripId, setSelectedTripId] = useState<number | null>(null)
+  const [mapModalOpen, setMapModalOpen] = useState(false)
   const { theme, systemTheme } = useTheme()
   const currentTheme = theme === 'system' ? systemTheme : theme
   const isDark = currentTheme === 'dark'
+
+  const handleShowMap = (tripId: number) => {
+    setSelectedTripId(tripId)
+    setMapModalOpen(true)
+  }
 
   // Format duration (seconds to hours/minutes)
   const formatDuration = (seconds: number): string => {
@@ -142,9 +151,19 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
             <div className="space-y-3">
               {topTrips.map((trip, index) => (
                 <div key={trip.trip_id} className="space-y-1.5">
-                  {/* Timestamp */}
-                  <div className="text-xs font-medium text-foreground">
-                    {formatTimestamp(trip.start_ts)}
+                  {/* Timestamp with Map Button */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-medium text-foreground">
+                      {formatTimestamp(trip.start_ts)}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => handleShowMap(trip.trip_id)}
+                    >
+                      <MapPin className="h-3.5 w-3.5 text-muted-foreground hover:text-blue-500" />
+                    </Button>
                   </div>
 
                   {/* Distance Bar */}
@@ -229,7 +248,17 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
                     className="p-3 rounded-lg border border-border/50 text-xs space-y-1"
                   >
                     <div className="flex items-center justify-between font-medium">
-                      <span className="text-foreground">{formatTimestamp(trip.start_ts)}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground">{formatTimestamp(trip.start_ts)}</span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-5 w-5 p-0"
+                          onClick={() => handleShowMap(trip.trip_id)}
+                        >
+                          <MapPin className="h-3 w-3 text-muted-foreground hover:text-blue-500" />
+                        </Button>
+                      </div>
                       <Badge variant="outline" className="text-xs">
                         {formatDistance(trip.distance_fused_m)}
                       </Badge>
@@ -253,6 +282,15 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
         )}
       </div>
       </div>
+
+      {/* Trip Map Modal */}
+      {selectedTripId && (
+        <TripMapModal
+          tripId={selectedTripId}
+          open={mapModalOpen}
+          onOpenChange={setMapModalOpen}
+        />
+      )}
     </div>
   )
 }
