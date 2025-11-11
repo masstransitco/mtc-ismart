@@ -9,9 +9,9 @@ import {
   Car,
   ChevronDown,
   ChevronUp,
-  MapPin,
 } from "lucide-react"
 import { RouteIcon } from "@/components/icons/route"
+import { CursorIcon } from "@/components/icons/cursor"
 import { formatDistanceToNow, format } from "date-fns"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -162,7 +162,7 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
                       className="h-6 w-6 p-0"
                       onClick={() => handleShowMap(trip.trip_id)}
                     >
-                      <MapPin className="h-3.5 w-3.5 text-muted-foreground hover:text-blue-500" />
+                      <CursorIcon className="h-3.5 w-3.5 text-muted-foreground hover:text-blue-500" />
                     </Button>
                   </div>
 
@@ -256,7 +256,7 @@ export function TripVehicleCard({ stats, vehicleInfo }: TripVehicleCardProps) {
                           className="h-5 w-5 p-0"
                           onClick={() => handleShowMap(trip.trip_id)}
                         >
-                          <MapPin className="h-3 w-3 text-muted-foreground hover:text-blue-500" />
+                          <CursorIcon className="h-3 w-3 text-muted-foreground hover:text-blue-500" />
                         </Button>
                       </div>
                       <Badge variant="outline" className="text-xs">
