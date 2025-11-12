@@ -31,6 +31,7 @@ interface VehicleStatusPayload {
   soc_precise?: number
   range_km?: number
   charging_state?: string
+  motion_state?: string
   charge_current_a?: number
   charge_voltage_v?: number
   charge_power_kw?: number
@@ -65,6 +66,10 @@ interface VehicleStatusPayload {
   heated_seat_front_left_level?: number
   heated_seat_front_right_level?: number
   rear_window_defrost?: boolean
+  is_parked?: boolean
+  gps_fix_quality?: string
+  gps_timestamp?: string
+  gps_age_seconds?: number
 }
 
 function safeParse(message: string): any {
@@ -103,9 +108,18 @@ interface VehicleCache extends Partial<VehicleStatusPayload> {
   lastUpdate: number
   prevSoc?: number
   gateway_bool_charging?: boolean
+  fieldTimestamps?: Map<string, number> // Track when each field arrived (for per-signal timestamps)
 }
 const vehicleDataCache: Map<string, VehicleCache> = new Map()
 const CACHE_FLUSH_INTERVAL = 5000 // Flush every 5 seconds
+
+// Helper function to record field arrival timestamp
+function recordFieldTimestamp(cache: VehicleCache, fieldName: string) {
+  if (!cache.fieldTimestamps) {
+    cache.fieldTimestamps = new Map()
+  }
+  cache.fieldTimestamps.set(fieldName, Date.now())
+}
 
 async function handleMessage(topic: string, message: Buffer) {
   try {
@@ -170,6 +184,7 @@ async function handleMessage(topic: string, message: Buffer) {
       }
       cache.soc = newSoc
       cache.soc_precise = newSoc
+      recordFieldTimestamp(cache, 'soc')
     } else if (topic.includes('/drivetrain/range')) {
       cache.range_km = parseFloat(actualValue)
     } else if (topic.includes('/drivetrain/charging')) {
@@ -198,18 +213,41 @@ async function handleMessage(topic: string, message: Buffer) {
     } else if (topic.includes('/drivetrain/running')) {
       cache.ignition = parseBoolean(actualValue)
       cache.engine_running = parseBoolean(actualValue)
+      recordFieldTimestamp(cache, 'ignition')
+    } else if (topic.includes('/drivetrain/parked')) {
+      cache.is_parked = parseBoolean(actualValue)
     } else if (topic.includes('/location/latitude')) {
-      cache.lat = parseFloat(actualValue)
+      const lat = parseFloat(actualValue)
+      // Only store valid coordinates - SAIC sends 0.0 when GPS signal is lost
+      // Preserve last known good position instead of overwriting with zeros
+      if (lat !== 0 && !isNaN(lat)) {
+        cache.lat = lat
+        recordFieldTimestamp(cache, 'lat')
+      }
     } else if (topic.includes('/location/longitude')) {
-      cache.lon = parseFloat(actualValue)
+      const lon = parseFloat(actualValue)
+      // Only store valid coordinates - SAIC sends 0.0 when GPS signal is lost
+      // Preserve last known good position instead of overwriting with zeros
+      if (lon !== 0 && !isNaN(lon)) {
+        cache.lon = lon
+        recordFieldTimestamp(cache, 'lon')
+      }
     } else if (topic.includes('/location/elevation')) {
       cache.altitude = parseFloat(actualValue)
     } else if (topic.includes('/location/heading')) {
       cache.bearing = parseFloat(actualValue)
     } else if (topic.includes('/location/speed')) {
       cache.speed = parseFloat(actualValue)
+      recordFieldTimestamp(cache, 'speed')
+    } else if (topic.includes('/location/gpsStatus')) {
+      cache.gps_fix_quality = actualValue.toString()
+    } else if (topic.includes('/location/gpsTimestamp')) {
+      cache.gps_timestamp = actualValue.toString()
+    } else if (topic.includes('/location/gpsAgeSeconds')) {
+      cache.gps_age_seconds = parseInt(actualValue)
     } else if (topic.includes('/doors/locked')) {
       cache.doors_locked = parseBoolean(actualValue)
+      recordFieldTimestamp(cache, 'doors_locked')
     } else if (topic.includes('/doors/driver')) {
       cache.door_driver_open = parseBoolean(actualValue)
     } else if (topic.includes('/doors/passenger')) {
@@ -315,7 +353,7 @@ setInterval(async () => {
 
           // Record telemetry for significant updates
           if (statusData.soc !== undefined || statusData.lat !== undefined) {
-            await insertTelemetry(vin, statusData)
+            await insertTelemetry(vin, statusData, cache)
           }
         }
       } catch (error) {
@@ -325,21 +363,30 @@ setInterval(async () => {
   }
 }, CACHE_FLUSH_INTERVAL)
 
-async function insertTelemetry(vin: string, statusData: Partial<VehicleStatusPayload>) {
+async function insertTelemetry(vin: string, statusData: Partial<VehicleStatusPayload>, cache: VehicleCache) {
   const eventType = statusData.soc !== undefined
     ? 'charge'
     : statusData.lat !== undefined
     ? 'location'
     : 'vehicle_state'
 
+  // Helper to get timestamp for a field
+  const getFieldTimestamp = (fieldName: string): string | undefined => {
+    const ts = cache.fieldTimestamps?.get(fieldName)
+    return ts ? new Date(ts).toISOString() : undefined
+  }
+
   const telemetryData = {
     vin,
     event_type: eventType,
     soc: statusData.soc,
+    soc_timestamp: getFieldTimestamp('soc'),
     soc_precise: statusData.soc_precise,
     range_km: statusData.range_km,
     charging_state: statusData.charging_state,
+    charging_state_timestamp: getFieldTimestamp('charging_state'),
     charge_power_kw: statusData.charge_power_kw,
+    charge_power_timestamp: getFieldTimestamp('charge_power'),
     charge_current_a: statusData.charge_current_a,
     charge_voltage_v: statusData.charge_voltage_v,
     charging_plug_connected: statusData.charging_plug_connected,
@@ -347,10 +394,19 @@ async function insertTelemetry(vin: string, statusData: Partial<VehicleStatusPay
     battery_heating: statusData.battery_heating,
     charge_current_limit: statusData.charge_current_limit,
     lat: statusData.lat,
+    lat_timestamp: getFieldTimestamp('lat'),
     lon: statusData.lon,
+    lon_timestamp: getFieldTimestamp('lon'),
     altitude: statusData.altitude,
     bearing: statusData.bearing,
     speed: statusData.speed,
+    speed_timestamp: getFieldTimestamp('speed'),
+    ignition_timestamp: getFieldTimestamp('ignition'),
+    doors_locked_timestamp: getFieldTimestamp('doors_locked'),
+    is_parked: statusData.is_parked,
+    gps_fix_quality: statusData.gps_fix_quality,
+    gps_timestamp: statusData.gps_timestamp,
+    gps_age_seconds: statusData.gps_age_seconds,
     raw_payload: statusData,
   }
 

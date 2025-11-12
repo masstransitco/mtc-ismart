@@ -60,9 +60,17 @@ export function publishCommand(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     // SAIC gateway expects topic format: saic/{user}/vehicles/{vin}/{command}
-    // Get SAIC user from environment (same as gateway config)
-    const saicUser = process.env.SAIC_USER || 'system@air.city'
-    const topic = `saic/${saicUser}/vehicles/${vin}/${command}`
+    // Get SAIC user from environment (must match gateway config)
+    const saicUser = process.env.SAIC_USER
+    if (!saicUser) {
+      const error = new Error('SAIC_USER environment variable not set')
+      console.error('[MQTT] Configuration error:', error.message)
+      reject(error)
+      return
+    }
+
+    const root = process.env.MQTT_TOPIC_ROOT || 'saic'
+    const topic = `${root}/${saicUser}/vehicles/${vin}/${command}`
     const message = typeof payload === 'string' ? payload : JSON.stringify(payload)
 
     client.publish(topic, message, { qos: 1 }, (error) => {

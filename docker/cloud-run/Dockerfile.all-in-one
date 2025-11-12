@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
+    git \
     nodejs \
     npm \
     supervisor \
@@ -17,8 +18,19 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python SAIC gateway
-RUN pip3 install saic-ismart-client-ng --break-system-packages
+# Install Poetry for Python dependency management
+RUN pip3 install poetry==2.1.3 --break-system-packages
+
+# Copy SAIC gateway files from local directory (main - Nov 3 verified working version restored)
+COPY saic-python-mqtt-gateway-main/pyproject.toml /opt/saic-gateway/
+COPY saic-python-mqtt-gateway-main/poetry.lock /opt/saic-gateway/
+COPY saic-python-mqtt-gateway-main/src/ /opt/saic-gateway/src/
+
+# Install gateway dependencies using Poetry with virtualenv
+WORKDIR /opt/saic-gateway
+RUN python3 -m venv /opt/saic-gateway/.venv && \
+    . /opt/saic-gateway/.venv/bin/activate && \
+    poetry install --no-root --only main
 
 # Create app directory
 WORKDIR /app
@@ -37,6 +49,7 @@ COPY hooks/ /app/hooks/
 
 # Copy MQTT config
 COPY docker/mosquitto/config/mosquitto-cloud.conf /etc/mosquitto/mosquitto.conf
+COPY docker/mosquitto/config/acl /etc/mosquitto/acl
 
 # Copy supervisor config
 COPY docker/cloud-run/supervisord.conf /etc/supervisor/conf.d/supervisord.conf

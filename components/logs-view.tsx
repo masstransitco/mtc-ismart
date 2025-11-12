@@ -28,17 +28,23 @@ import {
   Car,
   MapPin,
   DoorOpen,
+  Lightbulb,
+  Zap,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 
 const eventIcons: Record<string, any> = {
   lock: Lock,
+  unlock: Lock,
   climate: Wind,
   charge: Battery,
   find: Search,
+  find_my_car: Search,
   telemetry: FileText,
   door: DoorOpen,
   location: MapPin,
+  lights: Lightbulb,
+  ignition: Zap,
 }
 
 const severityColors: Record<string, string> = {
@@ -91,7 +97,7 @@ export default function LogsView() {
 
   const getVehicleLabel = (vin: string) => {
     const vehicle = vehicles.find(v => v.vin === vin)
-    return vehicle?.vehicles?.label || vin.slice(-6)
+    return vehicle?.vehicles?.plate_number || vehicle?.vehicles?.label || vin.slice(-6)
   }
 
   const formatTimestamp = (timestamp: string) => {
@@ -216,10 +222,27 @@ export default function LogsView() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <CardTitle className="text-base">{event.event_title}</CardTitle>
-                            <Badge variant="outline" className="text-xs">
-                              <Car className="w-3 h-3 mr-1" />
-                              {getVehicleLabel(event.vin)}
-                            </Badge>
+                            {(() => {
+                              const vehicle = vehicles.find(v => v.vin === event.vin)
+                              const plateNumber = vehicle?.vehicles?.plate_number
+
+                              if (plateNumber) {
+                                return (
+                                  <div className="inline-flex items-center justify-center px-2 py-0.5 bg-gradient-to-b from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border border-slate-800 dark:border-slate-600 rounded shadow-sm">
+                                    <span className="text-xs font-bold tracking-wider text-slate-900 dark:text-slate-100 font-mono">
+                                      {plateNumber}
+                                    </span>
+                                  </div>
+                                )
+                              }
+
+                              return (
+                                <Badge variant="outline" className="text-xs">
+                                  <Car className="w-3 h-3 mr-1" />
+                                  {getVehicleLabel(event.vin)}
+                                </Badge>
+                              )
+                            })()}
                           </div>
                           {event.event_description && (
                             <CardDescription className="mt-1">

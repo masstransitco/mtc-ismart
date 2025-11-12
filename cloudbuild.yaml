@@ -5,11 +5,10 @@ steps:
       - '-f'
       - 'docker/cloud-run/Dockerfile.all-in-one'
       - '-t'
-      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:latest'
-      - '-t'
-      - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:$BUILD_ID'
+      - 'gcr.io/cityos-392102/mtc-backend:gps-restore'
       - '.'
 images:
-  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:latest'
-  - 'asia-east1-docker.pkg.dev/$PROJECT_ID/mtc-containers/mtc-backend:$BUILD_ID'
+  - 'gcr.io/cityos-392102/mtc-backend:gps-restore'
 timeout: 1200s
+options:
+  machineType: 'E2_HIGHCPU_8'

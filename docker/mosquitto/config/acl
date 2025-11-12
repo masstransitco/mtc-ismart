@@ -6,6 +6,8 @@
 user mg_gateway
 topic readwrite saic/#
 topic readwrite mg/#
+topic readwrite +/vehicles/#
+topic readwrite system@air.city/#
 
 # App user - read status, write commands
 user mtc_app
@@ -13,13 +15,16 @@ topic read saic/+/vehicles/+/status/#
 topic read saic/+/vehicles/+/events/#
 topic read mg/+/status/#
 topic read mg/+/events/#
-topic write saic/+/vehicles/+/cmd/#
+topic write saic/+/vehicles/+/+/+/set
+topic write saic/+/vehicles/+/+/set
 topic write mg/+/cmd/#
 
 # Ingestion service - read all status and events
 user mtc_ingest
 topic read saic/#
 topic read mg/#
+topic read +/vehicles/#
+topic read system@air.city/#
 
 # System topics (all users can read)
 topic read $SYS/#

@@ -14,9 +14,9 @@ app.use(express.json())
 
 // MQTT client configuration (connects to localhost broker in Cloud Run)
 const mqttConfig = {
-  brokerUrl: 'mqtt://localhost:1883',
-  username: '',
-  password: '',
+  brokerUrl: process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883',
+  username: process.env.MQTT_USERNAME || '',
+  password: process.env.MQTT_PASSWORD || '',
 }
 
 // Health check endpoint
@@ -57,11 +57,17 @@ app.post('/api/vehicle/lock', async (req: Request, res: Response) => {
     const client = getMqttClient(mqttConfig)
 
     try {
+      // SAIC gateway only accepts "true" or "false" (no PIN in MQTT payload)
+      // The PIN is configured in the SAIC API account/vehicle settings
+      const payload = locked ? 'true' : 'false'
+
+      console.log(`[API] Publishing lock command: vin=${vin}, locked=${locked}, payload=${payload}`)
+
       await publishCommand(
         client,
         vin,
         'doors/locked/set',
-        locked ? 'true' : 'false'
+        payload
       )
 
       // Update command status
@@ -312,9 +318,9 @@ app.post('/api/vehicle/charge', async (req: Request, res: Response) => {
 
     try {
       if (action === 'start') {
-        await publishCommand(client, vin, 'charging/start/set', '')
+        await publishCommand(client, vin, 'drivetrain/charging/set', 'true')
       } else if (action === 'stop') {
-        await publishCommand(client, vin, 'charging/stop/set', '')
+        await publishCommand(client, vin, 'drivetrain/charging/set', 'false')
       } else if (action === 'setTarget' && target) {
         await publishCommand(client, vin, 'drivetrain/socTarget/set', target.toString())
       }

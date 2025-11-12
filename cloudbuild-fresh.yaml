@@ -1,0 +1,15 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--no-cache'
+      - '-f'
+      - 'docker/cloud-run/Dockerfile.all-in-one'
+      - '-t'
+      - 'gcr.io/cityos-392102/mtc-backend:nov3-restored'
+      - '.'
+images:
+  - 'gcr.io/cityos-392102/mtc-backend:nov3-restored'
+timeout: 1200s
+options:
+  machineType: 'E2_HIGHCPU_8'

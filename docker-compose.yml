@@ -4,6 +4,7 @@ services:
     container_name: mtc-mqtt-broker
     volumes:
       - ./docker/mosquitto/config/mosquitto-dev.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./docker/mosquitto/config/acl:/etc/mosquitto/acl:ro
       - mosq-data:/mosquitto/data
       - mosq-log:/mosquitto/log
     ports:
@@ -33,6 +34,27 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+
+  ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev-ingest
+    container_name: mtc-ingest
+    environment:
+      - NODE_ENV=development
+      - MQTT_BROKER_URL=mqtt://mosquitto:1883
+      - MQTT_USER=mtc_ingest
+      - MQTT_PASSWORD=
+      - SAIC_USER=system@air.city
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - mtc-network
+    command: npx tsx server/ingest.ts
 
 volumes:
   mosq-data:
