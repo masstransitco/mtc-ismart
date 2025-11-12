@@ -129,23 +129,21 @@ export default function LogsView() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header and Filters */}
+      {/* Header with Filters */}
       <div className="sticky top-0 z-10 bg-background border-b p-4">
-        <div className="flex flex-col space-y-3">
+        <div className="flex items-center justify-between gap-4">
           {/* Title and Event Count */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold tracking-tight">Event Logs</h2>
-              <p className="text-sm text-muted-foreground">
-                {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}
-              </p>
-            </div>
+          <div>
+            <h2 className="text-2xl font-semibold tracking-tight">Event Logs</h2>
+            <p className="text-sm text-muted-foreground">
+              {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}
+            </p>
           </div>
 
           {/* Filters and Refresh Button */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <Select value={selectedVin} onValueChange={setSelectedVin}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[160px]">
                 <SelectValue placeholder="All vehicles" />
               </SelectTrigger>
               <SelectContent>
@@ -159,7 +157,7 @@ export default function LogsView() {
             </Select>
 
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[160px]">
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
               <SelectContent>
@@ -173,7 +171,7 @@ export default function LogsView() {
             </Select>
 
             <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[160px]">
                 <SelectValue placeholder="All severities" />
               </SelectTrigger>
               <SelectContent>
@@ -190,7 +188,6 @@ export default function LogsView() {
               size="icon"
               onClick={handleRefresh}
               disabled={refreshing}
-              className="ml-auto"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
             </Button>
