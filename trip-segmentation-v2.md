@@ -537,11 +537,19 @@ $$);
    - `gps_jitter_daily` table for adaptive thresholds
    - `trip_processing_checkpoint` table for incremental processing (v2.0)
    - `compute_daily_jitter()` function
-   - `derive_trips()` function with v1.1 algorithm
+   - `derive_trips()` function with v2.1 algorithm (>10% overlap threshold)
    - `derive_trips_incremental()` function for checkpoint-based processing (v2.0)
    - `process_all_vehicles_trips()` wrapper function
+   - `merge_overlapping_trips(vin)` function for cleaning duplicates (v2.1)
+   - `clean_all_overlapping_trips()` function for fleet-wide cleanup (v2.1)
    - PostGIS geometry columns and spatial indexes
    - Row-level security policies
+
+1a. **Overlapping Trips Fix** (`supabase/migrations/021_fix_overlapping_trips.sql`) - **v2.1**
+   - Fixed duplicate detection to only reject trips with >10% time overlap
+   - Prevents hourly cron jobs from creating multiple trips with same end time
+   - Added functions to merge/clean existing overlapping trips
+   - Deployed: November 12, 2025
 
 2. **Python Script** (`scripts/process-trips.py`)
    - Standalone trip processor for batch/backlog processing
@@ -677,6 +685,50 @@ AND lon != 0  -- These represent GPS signal loss
 - Processing time reduced from 8+ seconds (timeout) to 0.4-1.7 seconds
 - See v2.0 Performance Improvements section above
 
+### ⚠️ Overlapping Trips Issue (Fixed Nov 12, 2025)
+
+**Problem**: Hourly cron jobs creating duplicate/overlapping trips
+- Example: LSJWH4098PN070110 had 67 trips totaling 29.65 hours in a 24-hour period
+- Many trips shared the exact same end time with different start times
+- Trip 945-954 all ended at 18:01:37 with starts ranging from 17:11 to 17:53
+
+**Root Cause**: Overly permissive duplicate detection in `derive_trips()`
+- Function used `&&` operator (any overlap = duplicate)
+- Hourly processing with 1-hour lookback + rolling windows (60s/120s)
+- Each cron run detected slightly different trip boundaries
+- Different start/stop edge detections in overlapping time windows
+- Multiple trips converged to the same stop condition (end time)
+
+**Fix**: Changed duplicate detection to require >10% time overlap
+```sql
+-- Old (too permissive):
+where not exists (
+  select 1 from trips t
+  where t.vin = vin_in
+    and tstzrange(t.start_ts, t.end_ts, '[)') && tstzrange(f.start_ts, f.end_ts, '[)')
+);
+
+-- New (only rejects significant overlaps):
+where not exists (
+  select 1 from trips t
+  where t.vin = vin_in
+    and tstzrange(t.start_ts, t.end_ts, '[)') && tstzrange(f.start_ts, f.end_ts, '[)')
+    and (overlap_duration / new_trip_duration) > 0.1  -- >10% overlap
+);
+```
+
+**Impact**: Fleet-wide cleanup removed 132 overlapping trips
+- LSJWH4098PN070110: 67 trips → 16 trips (29.65h → 7.52h)
+- LSJWH4092PN070118: 13 overlaps removed
+- LSJWH4092PN070121: 17 overlaps removed
+- LSJWH4098PN070124: 13 overlaps removed
+- LSJWH409XPN070089: 27 overlaps removed
+
+**Migration**: `021_fix_overlapping_trips.sql`
+**New Functions**:
+- `merge_overlapping_trips(vin)` - Clean overlaps for specific vehicle
+- `clean_all_overlapping_trips()` - Clean overlaps across all vehicles
+
 ## **Timezone Handling**
 
 **Database Configuration:**
@@ -798,14 +850,16 @@ python3 scripts/process-trips.py
 
 ## **Version History**
 
+- **v2.1** (Nov 12, 2025): Fixed overlapping trips issue with >10% overlap threshold
 - **v2.0** (Nov 11, 2025): Per-vehicle hourly cron jobs, 1-hour lookback, incremental processing support
 - **v1.1** (Nov 5-10, 2025): Single 6-hour cron job, 24-hour lookback, GPS signal loss fixes
 - **v1.0** (Nov 1-4, 2025): Initial implementation with Python script
 
 ---
 
-**Last Updated**: November 11, 2025
+**Last Updated**: November 12, 2025
 **Status**: ✅ Production-ready with automated hourly processing per vehicle
 **Performance**: ~1.2 seconds average processing time, no timeouts
-**Coverage**: 5 vehicles, 148 trips, 2,061 km tracked
+**Data Quality**: Accurate non-overlapping trips with realistic daily durations
+**Coverage**: 5 vehicles, 199 trips (after cleanup), 2,505 km tracked
 
