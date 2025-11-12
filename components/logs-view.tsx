@@ -32,6 +32,7 @@ import {
   Zap,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
+import { useTheme } from "next-themes"
 
 const eventIcons: Record<string, any> = {
   lock: Lock,
@@ -64,10 +65,14 @@ const severityIcons: Record<string, any> = {
 export default function LogsView() {
   const { events, loading, refetch } = useVehicleEvents(500)
   const { vehicles } = useVehicles()
+  const { theme, systemTheme } = useTheme()
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVin, setSelectedVin] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all")
+
+  const currentTheme = theme === 'system' ? systemTheme : theme
+  const isDark = currentTheme === 'dark'
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -214,8 +219,17 @@ export default function LogsView() {
                 : FileText
 
               return (
-                <Card key={event.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="pb-3">
+                <div
+                  key={event.id}
+                  className="relative overflow-hidden rounded-lg border border-border shadow-sm hover:shadow-md transition-shadow"
+                  style={{
+                    background: isDark
+                      ? 'linear-gradient(to bottom right, hsl(222 47% 8% / 0.9), hsl(217 33% 15% / 0.4), hsl(217 33% 17% / 0.6))'
+                      : 'linear-gradient(to bottom right, hsl(210 20% 98% / 0.5), hsl(214 32% 96% / 0.6), hsl(220 13% 95% / 0.4))'
+                  }}
+                >
+                  <div className="relative">
+                    <div className="flex flex-col space-y-1.5 p-6 pb-3">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 flex-1">
                         <div className="mt-1">
@@ -223,7 +237,7 @@ export default function LogsView() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <CardTitle className="text-base">{event.event_title}</CardTitle>
+                            <h3 className="text-base font-semibold leading-none tracking-tight">{event.event_title}</h3>
                             {(() => {
                               const vehicle = vehicles.find(v => v.vin === event.vin)
                               const plateNumber = vehicle?.vehicles?.plate_number
@@ -247,9 +261,9 @@ export default function LogsView() {
                             })()}
                           </div>
                           {event.event_description && (
-                            <CardDescription className="mt-1">
+                            <p className="text-sm text-muted-foreground mt-1">
                               {event.event_description}
-                            </CardDescription>
+                            </p>
                           )}
                         </div>
                       </div>
@@ -266,31 +280,32 @@ export default function LogsView() {
                         </span>
                       </div>
                     </div>
-                  </CardHeader>
+                    </div>
 
-                  {event.metadata && Object.keys(event.metadata).length > 0 && (
-                    <CardContent className="pt-0">
-                      <div className="bg-muted/50 rounded-md p-3 space-y-1">
-                        <p className="text-xs font-medium text-muted-foreground mb-2">Metadata</p>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                          {Object.entries(event.metadata).map(([key, value]) => (
-                            <div key={key} className="flex items-baseline gap-2 text-xs">
-                              <span className="text-muted-foreground font-medium">{key}:</span>
-                              <span className="font-mono break-all">
-                                {typeof value === 'object'
-                                  ? JSON.stringify(value)
-                                  : String(value)}
-                              </span>
-                            </div>
-                          ))}
+                    {event.metadata && Object.keys(event.metadata).length > 0 && (
+                      <div className="p-6 pt-0">
+                        <div className="bg-muted/50 rounded-md p-3 space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Metadata</p>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            {Object.entries(event.metadata).map(([key, value]) => (
+                              <div key={key} className="flex items-baseline gap-2 text-xs">
+                                <span className="text-muted-foreground font-medium">{key}:</span>
+                                <span className="font-mono break-all">
+                                  {typeof value === 'object'
+                                    ? JSON.stringify(value)
+                                    : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2 pt-2 border-t">
+                            {formatDateTime(event.created_at)}
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-2 pt-2 border-t">
-                          {formatDateTime(event.created_at)}
-                        </p>
                       </div>
-                    </CardContent>
-                  )}
-                </Card>
+                    )}
+                  </div>
+                </div>
               )
             })
           )}
