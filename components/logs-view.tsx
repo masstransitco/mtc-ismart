@@ -129,67 +129,72 @@ export default function LogsView() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Filters */}
-      <div className="sticky top-0 z-10 bg-background border-b p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Event Logs</h2>
-            <p className="text-sm text-muted-foreground">
-              {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}
-            </p>
+      {/* Header and Filters */}
+      <div className="sticky top-0 z-10 bg-background border-b p-4">
+        <div className="flex flex-col space-y-3">
+          {/* Title and Event Count */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight">Event Logs</h2>
+              <p className="text-sm text-muted-foreground">
+                {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}
+              </p>
+            </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Select value={selectedVin} onValueChange={setSelectedVin}>
-            <SelectTrigger>
-              <SelectValue placeholder="All vehicles" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Vehicles</SelectItem>
-              {vehicles.map(vehicle => (
-                <SelectItem key={vehicle.vin} value={vehicle.vin}>
-                  {vehicle.vehicles?.label || vehicle.vin}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Filters and Refresh Button */}
+          <div className="flex items-center gap-3">
+            <Select value={selectedVin} onValueChange={setSelectedVin}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All vehicles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vehicles</SelectItem>
+                {vehicles.map(vehicle => (
+                  <SelectItem key={vehicle.vin} value={vehicle.vin}>
+                    {vehicle.vehicles?.label || vehicle.vin}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger>
-              <SelectValue placeholder="All categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map(category => (
-                <SelectItem key={category} value={category}>
-                  {category.charAt(0).toUpperCase() + category.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map(category => (
+                  <SelectItem key={category} value={category}>
+                    {category.charAt(0).toUpperCase() + category.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-            <SelectTrigger>
-              <SelectValue placeholder="All severities" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Severities</SelectItem>
-              <SelectItem value="info">Info</SelectItem>
-              <SelectItem value="success">Success</SelectItem>
-              <SelectItem value="warning">Warning</SelectItem>
-              <SelectItem value="error">Error</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All severities" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Severities</SelectItem>
+                <SelectItem value="info">Info</SelectItem>
+                <SelectItem value="success">Success</SelectItem>
+                <SelectItem value="warning">Warning</SelectItem>
+                <SelectItem value="error">Error</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="ml-auto"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </div>
       </div>
 
