@@ -1,7 +1,7 @@
 "use client"
 
 import { ArrowDown, ArrowUp, Minus } from "lucide-react"
-import { useSpeedUnit } from "@/components/main-dashboard"
+import { useSpeedUnit } from "@/contexts/speed-unit-context"
 
 interface MotionStatusProps {
   motionState: string | null

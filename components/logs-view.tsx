@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useVehicleEvents } from "@/hooks/use-vehicle-events"
 import { useVehicles } from "@/hooks/use-vehicle"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -70,9 +70,26 @@ export default function LogsView() {
   const [selectedVin, setSelectedVin] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all")
+  const filterRef = useRef<HTMLDivElement>(null)
 
   const currentTheme = theme === 'system' ? systemTheme : theme
   const isDark = currentTheme === 'dark'
+
+  // Prevent scroll on touch for mobile browsers
+  useEffect(() => {
+    const filter = filterRef.current
+    if (!filter) return
+
+    const preventScroll = (e: TouchEvent) => {
+      e.preventDefault()
+    }
+
+    filter.addEventListener('touchmove', preventScroll, { passive: false })
+
+    return () => {
+      filter.removeEventListener('touchmove', preventScroll)
+    }
+  }, [])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -135,20 +152,17 @@ export default function LogsView() {
   return (
     <div className="flex flex-col h-full">
       {/* Header with Filters */}
-      <div className="sticky top-0 z-10 bg-background border-b p-4">
-        <div className="flex items-center justify-between gap-4">
-          {/* Title and Event Count */}
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Event Logs</h2>
-            <p className="text-sm text-muted-foreground">
-              {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}
-            </p>
+      <div ref={filterRef} className="sticky top-0 z-10 bg-background border-b touch-none">
+        <div className="p-2 md:p-4 space-y-2">
+          {/* Event count */}
+          <div className="text-xs md:text-sm text-muted-foreground font-medium px-1">
+            {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}
           </div>
 
-          {/* Filters and Refresh Button */}
+          {/* Filters row 1 */}
           <div className="flex items-center gap-2">
             <Select value={selectedVin} onValueChange={setSelectedVin}>
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
                 <SelectValue placeholder="All vehicles" />
               </SelectTrigger>
               <SelectContent>
@@ -162,11 +176,11 @@ export default function LogsView() {
             </Select>
 
             <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All categories" />
+              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
+                <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
+                <SelectItem value="all">All</SelectItem>
                 {categories.map(category => (
                   <SelectItem key={category} value={category}>
                     {category.charAt(0).toUpperCase() + category.slice(1)}
@@ -176,11 +190,11 @@ export default function LogsView() {
             </Select>
 
             <Select value={selectedSeverity} onValueChange={setSelectedSeverity}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All severities" />
+              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
+                <SelectValue placeholder="Severity" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Severities</SelectItem>
+                <SelectItem value="all">All</SelectItem>
                 <SelectItem value="info">Info</SelectItem>
                 <SelectItem value="success">Success</SelectItem>
                 <SelectItem value="warning">Warning</SelectItem>
@@ -190,11 +204,12 @@ export default function LogsView() {
 
             <Button
               variant="outline"
-              size="icon"
+              size="sm"
               onClick={handleRefresh}
               disabled={refreshing}
+              className="h-8 px-2 md:px-3"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
             </Button>
           </div>
         </div>

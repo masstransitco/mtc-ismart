@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { VehicleTripStats } from "@/hooks/use-trips"
 import { VehicleStatus } from "@/hooks/use-vehicle"
-import { useSpeedUnit } from "@/components/main-dashboard"
+import { useSpeedUnit } from "@/contexts/speed-unit-context"
 import {
   Clock,
   Car,

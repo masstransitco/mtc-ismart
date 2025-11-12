@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useTrips } from "@/hooks/use-trips"
 import { useVehicles } from "@/hooks/use-vehicle"
 import { TripVehicleCard } from "@/components/vehicle/trip-vehicle-card"
@@ -20,12 +20,29 @@ export default function TripsView() {
   const [selectedVin, setSelectedVin] = useState<string>("all")
   const [selectedTimeRange, setSelectedTimeRange] = useState<string>("24h")
   const [refreshing, setRefreshing] = useState(false)
+  const filterRef = useRef<HTMLDivElement>(null)
 
   const { vehicles } = useVehicles()
   const { vehicleStats, loading, error, refetch } = useTrips(selectedVin, selectedTimeRange)
   const { theme, systemTheme } = useTheme()
   const currentTheme = theme === 'system' ? systemTheme : theme
   const isDark = currentTheme === 'dark'
+
+  // Prevent scroll on touch for mobile browsers
+  useEffect(() => {
+    const filter = filterRef.current
+    if (!filter) return
+
+    const preventScroll = (e: TouchEvent) => {
+      e.preventDefault()
+    }
+
+    filter.addEventListener('touchmove', preventScroll, { passive: false })
+
+    return () => {
+      filter.removeEventListener('touchmove', preventScroll)
+    }
+  }, [])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -60,46 +77,47 @@ export default function TripsView() {
   return (
     <div className="flex flex-col h-full">
       {/* Filters */}
-      <div className="sticky top-0 z-10 bg-background border-b p-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="text-sm text-muted-foreground">
+      <div ref={filterRef} className="sticky top-0 z-10 bg-background border-b touch-none">
+        <div className="p-2 md:p-4 space-y-2">
+          {/* Trip count and time range */}
+          <div className="text-xs md:text-sm text-muted-foreground font-medium px-1">
             {totalTrips} trip{totalTrips !== 1 ? "s" : ""} • {getTimeRangeLabel(selectedTimeRange)}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Select value={selectedVin} onValueChange={setSelectedVin}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="All vehicles" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Vehicles</SelectItem>
-                  {vehicles.map((vehicle) => (
-                    <SelectItem key={vehicle.vin} value={vehicle.vin}>
-                      {vehicle.vehicles?.label || vehicle.vehicles?.plate_number || vehicle.vin}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
 
-              <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
-                <SelectTrigger className="w-[160px]">
-                  <SelectValue placeholder="Select time range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="24h">Last 24 Hours</SelectItem>
-                  <SelectItem value="7d">Last 7 Days</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Filters row */}
+          <div className="flex items-center gap-2">
+            <Select value={selectedVin} onValueChange={setSelectedVin}>
+              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
+                <SelectValue placeholder="All vehicles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vehicles</SelectItem>
+                {vehicles.map((vehicle) => (
+                  <SelectItem key={vehicle.vin} value={vehicle.vin}>
+                    {vehicle.vehicles?.label || vehicle.vehicles?.plate_number || vehicle.vin}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
+              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
+                <SelectValue placeholder="Time range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="24h">24h</SelectItem>
+                <SelectItem value="7d">7d</SelectItem>
+              </SelectContent>
+            </Select>
 
             <Button
               variant="outline"
               size="sm"
               onClick={handleRefresh}
               disabled={refreshing}
+              className="h-8 px-2 md:px-3"
             >
-              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
             </Button>
           </div>
         </div>

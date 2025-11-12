@@ -14,7 +14,7 @@ import { ClimateControls } from "./climate-controls"
 import { FindMyCarControls } from "./find-my-car-controls"
 import { getVehicleStatus } from "@/lib/vehicle-status"
 import { cn } from "@/lib/utils"
-import { useSpeedUnit } from "@/components/main-dashboard"
+import { useSpeedUnit } from "@/contexts/speed-unit-context"
 import { useTheme } from "next-themes"
 import {
   Battery,
