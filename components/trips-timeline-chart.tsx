@@ -2,12 +2,13 @@
 
 import { useMemo } from "react"
 import { VehicleTripStats } from "@/hooks/use-trips"
+import { VehicleStatus } from "@/hooks/use-vehicle"
 import { useSpeedUnit } from "@/contexts/speed-unit-context"
 
 interface TripsTimelineChartProps {
   vehicleStats: VehicleTripStats[]
   timeRange: string
-  vehicles: Array<{ vin: string, vehicles?: { label?: string, plate_number?: string } }>
+  vehicles: VehicleStatus[]
 }
 
 export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }: TripsTimelineChartProps) {
@@ -19,11 +20,11 @@ export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }
     let start: Date
 
     switch(timeRange) {
-      case '30m':
-        start = new Date(now.getTime() - 30 * 60 * 1000)
-        break
       case '1h':
         start = new Date(now.getTime() - 60 * 60 * 1000)
+        break
+      case '6h':
+        start = new Date(now.getTime() - 6 * 60 * 60 * 1000)
         break
       case '12h':
         start = new Date(now.getTime() - 12 * 60 * 60 * 1000)
@@ -32,7 +33,7 @@ export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }
         start = new Date(now.getTime() - 24 * 60 * 60 * 1000)
         break
       default:
-        start = new Date(now.getTime() - 12 * 60 * 60 * 1000)
+        start = new Date(now.getTime() - 6 * 60 * 60 * 1000)
     }
 
     return {
@@ -149,9 +150,11 @@ export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }
 
     // Determine number of markers based on time range
     switch(timeRange) {
-      case '30m':
       case '1h':
         markerCount = 4
+        break
+      case '6h':
+        markerCount = 6
         break
       case '12h':
         markerCount = 6
@@ -160,7 +163,7 @@ export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }
         markerCount = 6
         break
       default:
-        markerCount = 4
+        markerCount = 6
     }
 
     for (let i = 0; i <= markerCount; i++) {
@@ -189,7 +192,7 @@ export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }
         <div className="w-full overflow-x-auto">
           <div className="min-w-[600px]">
             {/* Time markers */}
-            <div className="relative h-6 mb-2 ml-12 md:ml-16 lg:ml-20">
+            <div className="relative h-6 mb-2 ml-12 md:ml-16 lg:ml-20 mr-12 md:mr-16">
               {timeMarkers.map((marker, index) => (
                 <div
                   key={index}
@@ -202,6 +205,16 @@ export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }
                   </span>
                 </div>
               ))}
+              {/* Now marker at the end */}
+              <div
+                className="absolute top-0 flex flex-col items-end"
+                style={{ right: '-3rem' }}
+              >
+                <div className="w-px h-2 bg-border" />
+                <span className="text-[9px] text-muted-foreground font-mono mt-1">
+                  {formatTimeLabel(new Date())}
+                </span>
+              </div>
             </div>
 
             {/* Vehicle rows */}

@@ -19,7 +19,7 @@ import TripsTimelineChart from "@/components/trips-timeline-chart"
 
 export default function TripsView() {
   const [selectedVin, setSelectedVin] = useState<string>("all")
-  const [selectedTimeRange, setSelectedTimeRange] = useState<string>("12h")
+  const [selectedTimeRange, setSelectedTimeRange] = useState<string>("6h")
   const [refreshing, setRefreshing] = useState(false)
   const filterRef = useRef<HTMLDivElement>(null)
 
@@ -53,10 +53,10 @@ export default function TripsView() {
 
   const getTimeRangeLabel = (range: string) => {
     switch (range) {
-      case "30m":
-        return "last 30 minutes"
       case "1h":
         return "last hour"
+      case "6h":
+        return "last 6 hours"
       case "12h":
         return "last 12 hours"
       case "24h":
@@ -68,10 +68,10 @@ export default function TripsView() {
 
   const getTimeRangeShortLabel = (range: string) => {
     switch (range) {
-      case "30m":
-        return "30 min"
       case "1h":
         return "1 hour"
+      case "6h":
+        return "6 hours"
       case "12h":
         return "12 hours"
       case "24h":
@@ -111,8 +111,8 @@ export default function TripsView() {
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="30m">Last 30 minutes</SelectItem>
                 <SelectItem value="1h">Last hour</SelectItem>
+                <SelectItem value="6h">Last 6 hours</SelectItem>
                 <SelectItem value="12h">Last 12 hours</SelectItem>
                 <SelectItem value="24h">Last 24 hours</SelectItem>
               </SelectContent>
