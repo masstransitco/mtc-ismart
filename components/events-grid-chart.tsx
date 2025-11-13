@@ -2,11 +2,12 @@
 
 import { useMemo } from "react"
 import { VehicleEvent } from "@/hooks/use-vehicle-events"
+import { VehicleStatus } from "@/hooks/use-vehicle"
 
 interface EventsGridChartProps {
   events: VehicleEvent[]
   timeRange: string
-  vehicles: Array<{ vin: string, vehicles?: { label?: string, plate_number?: string } }>
+  vehicles: VehicleStatus[]
 }
 
 export default function EventsGridChart({ events, timeRange, vehicles }: EventsGridChartProps) {
