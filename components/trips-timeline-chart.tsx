@@ -146,37 +146,48 @@ export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }
   // Generate time markers (evenly spaced markers based on time range)
   const timeMarkers = useMemo(() => {
     const markers: Array<{ position: number, label: string }> = []
-    let markerCount: number
 
-    // Determine number of markers based on time range
+    // Determine number of intermediate markers (excluding start and end)
+    let intermediateMarkers: number
     switch(timeRange) {
       case '1h':
-        markerCount = 4
+        intermediateMarkers = 2 // Total: 4 markers including start/end
         break
       case '6h':
-        markerCount = 6
-        break
       case '12h':
-        markerCount = 6
-        break
       case '24h':
-        markerCount = 6
+        intermediateMarkers = 3 // Total: 5 markers including start/end
         break
       default:
-        markerCount = 6
+        intermediateMarkers = 3
     }
 
-    for (let i = 0; i <= markerCount; i++) {
-      const position = (i / markerCount) * 100
-      const time = new Date(startTime.getTime() + (totalDurationMs * i / markerCount))
+    const totalMarkers = intermediateMarkers + 2 // +2 for start and end
+
+    // Add start marker
+    markers.push({
+      position: 0,
+      label: formatTimeLabel(startTime)
+    })
+
+    // Add intermediate markers
+    for (let i = 1; i <= intermediateMarkers; i++) {
+      const position = (i / (totalMarkers - 1)) * 100
+      const time = new Date(startTime.getTime() + (totalDurationMs * i / (totalMarkers - 1)))
       markers.push({
         position,
         label: formatTimeLabel(time)
       })
     }
 
+    // Add end marker (now)
+    markers.push({
+      position: 100,
+      label: formatTimeLabel(endTime)
+    })
+
     return markers
-  }, [startTime, totalDurationMs, timeRange])
+  }, [startTime, endTime, totalDurationMs, timeRange])
 
   if (tripsWithVehicles.length === 0) {
     return null
@@ -189,32 +200,31 @@ export default function TripsTimelineChart({ vehicleStats, timeRange, vehicles }
           Trip Timeline
         </div>
 
-        <div className="w-full overflow-x-auto">
-          <div className="min-w-[600px]">
+        <div className="w-full">
+          <div className="w-full">
             {/* Time markers */}
-            <div className="relative h-6 mb-2 ml-12 md:ml-16 lg:ml-20 mr-12 md:mr-16">
-              {timeMarkers.map((marker, index) => (
-                <div
-                  key={index}
-                  className="absolute top-0 flex flex-col items-center"
-                  style={{ left: `${marker.position}%` }}
-                >
-                  <div className="w-px h-2 bg-border" />
-                  <span className="text-[9px] text-muted-foreground font-mono mt-1">
-                    {marker.label}
-                  </span>
-                </div>
-              ))}
-              {/* Now marker at the end */}
-              <div
-                className="absolute top-0 flex flex-col items-end"
-                style={{ right: '-3rem' }}
-              >
-                <div className="w-px h-2 bg-border" />
-                <span className="text-[9px] text-muted-foreground font-mono mt-1">
-                  {formatTimeLabel(new Date())}
-                </span>
-              </div>
+            <div className="relative h-6 mb-2 ml-12 md:ml-16 lg:ml-20">
+              {timeMarkers.map((marker, index) => {
+                const isFirst = index === 0
+                const isLast = index === timeMarkers.length - 1
+
+                return (
+                  <div
+                    key={index}
+                    className={`absolute top-0 flex flex-col ${isFirst ? 'items-start' : isLast ? 'items-end' : 'items-center'}`}
+                    style={{
+                      left: isFirst ? '0%' : isLast ? 'auto' : `${marker.position}%`,
+                      right: isLast ? '0%' : 'auto',
+                      transform: isFirst || isLast ? 'none' : 'translateX(-50%)'
+                    }}
+                  >
+                    <div className="w-px h-2 bg-border" />
+                    <span className="text-[9px] text-muted-foreground font-mono mt-1 whitespace-nowrap">
+                      {marker.label}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Vehicle rows */}
