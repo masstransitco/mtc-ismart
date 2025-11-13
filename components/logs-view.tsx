@@ -30,9 +30,12 @@ import {
   DoorOpen,
   Lightbulb,
   Zap,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { useTheme } from "next-themes"
+import EventsGridChart from "@/components/events-grid-chart"
 
 const eventIcons: Record<string, any> = {
   lock: Lock,
@@ -63,13 +66,15 @@ const severityIcons: Record<string, any> = {
 }
 
 export default function LogsView() {
-  const { events, loading, refetch } = useVehicleEvents(500)
+  const [selectedTimeRange, setSelectedTimeRange] = useState<string>("1h")
+  const { events, loading, refetch } = useVehicleEvents(selectedTimeRange)
   const { vehicles } = useVehicles()
   const { theme, systemTheme } = useTheme()
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVin, setSelectedVin] = useState<string>("all")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [selectedSeverity, setSelectedSeverity] = useState<string>("all")
+  const [expandedEvents, setExpandedEvents] = useState<Set<number>>(new Set())
   const filterRef = useRef<HTMLDivElement>(null)
 
   const currentTheme = theme === 'system' ? systemTheme : theme
@@ -97,6 +102,18 @@ export default function LogsView() {
     setRefreshing(false)
   }
 
+  const toggleEventExpanded = (eventId: number) => {
+    setExpandedEvents(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(eventId)) {
+        newSet.delete(eventId)
+      } else {
+        newSet.add(eventId)
+      }
+      return newSet
+    })
+  }
+
   // Filter events based on selections
   const filteredEvents = useMemo(() => {
     return events.filter(event => {
@@ -120,6 +137,26 @@ export default function LogsView() {
   const getVehicleLabel = (vin: string) => {
     const vehicle = vehicles.find(v => v.vin === vin)
     return vehicle?.vehicles?.plate_number || vehicle?.vehicles?.label || vin.slice(-6)
+  }
+
+  const getTimeRangeLabel = (range: string) => {
+    switch(range) {
+      case '30m': return 'last 30 minutes'
+      case '1h': return 'last hour'
+      case '12h': return 'last 12 hours'
+      case '24h': return 'last 24 hours'
+      default: return 'selected time range'
+    }
+  }
+
+  const getTimeRangeShortLabel = (range: string) => {
+    switch(range) {
+      case '30m': return '30 min'
+      case '1h': return '1 hour'
+      case '12h': return '12 hours'
+      case '24h': return '24 hours'
+      default: return 'Time range'
+    }
   }
 
   const formatTimestamp = (timestamp: string) => {
@@ -154,12 +191,27 @@ export default function LogsView() {
       {/* Header with Filters */}
       <div ref={filterRef} className="sticky top-0 z-10 bg-background border-b touch-none">
         <div className="p-2 md:p-4 space-y-2">
-          {/* Event count */}
-          <div className="text-xs md:text-sm text-muted-foreground font-medium px-1">
-            {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""}
+          {/* Event count and Time Range Filter */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs md:text-sm text-muted-foreground font-medium px-1">
+              {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""} in {getTimeRangeLabel(selectedTimeRange)}
+            </div>
+            <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
+              <SelectTrigger className="h-8 text-xs w-24 md:w-28">
+                <SelectValue>
+                  {getTimeRangeShortLabel(selectedTimeRange)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="30m">Last 30 minutes</SelectItem>
+                <SelectItem value="1h">Last hour</SelectItem>
+                <SelectItem value="12h">Last 12 hours</SelectItem>
+                <SelectItem value="24h">Last 24 hours</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Filters row 1 */}
+          {/* Filters row */}
           <div className="flex items-center gap-2">
             <Select value={selectedVin} onValueChange={setSelectedVin}>
               <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
@@ -215,6 +267,11 @@ export default function LogsView() {
         </div>
       </div>
 
+      {/* Events Grid Chart */}
+      <div className="border-b bg-background">
+        <EventsGridChart events={filteredEvents} timeRange={selectedTimeRange} vehicles={vehicles} />
+      </div>
+
       {/* Events List */}
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-3">
@@ -232,73 +289,92 @@ export default function LogsView() {
               const CategoryIcon = event.event_category
                 ? eventIcons[event.event_category] || FileText
                 : FileText
+              const isExpanded = expandedEvents.has(event.id)
 
               return (
                 <div
                   key={event.id}
-                  className="relative overflow-hidden rounded-lg border border-border shadow-sm hover:shadow-md transition-shadow"
+                  className="relative overflow-hidden rounded-lg border border-border shadow-sm hover:shadow-md transition-all cursor-pointer"
                   style={{
                     background: isDark
                       ? 'linear-gradient(to bottom right, hsl(222 47% 8% / 0.9), hsl(217 33% 15% / 0.4), hsl(217 33% 17% / 0.6))'
                       : 'linear-gradient(to bottom right, hsl(210 20% 98% / 0.5), hsl(214 32% 96% / 0.6), hsl(220 13% 95% / 0.4))'
                   }}
+                  onClick={() => toggleEventExpanded(event.id)}
                 >
                   <div className="relative">
-                    <div className="flex flex-col space-y-1.5 p-6 pb-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div className="mt-1">
-                          <CategoryIcon className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="text-base font-semibold leading-none tracking-tight">{event.event_title}</h3>
-                            {(() => {
-                              const vehicle = vehicles.find(v => v.vin === event.vin)
-                              const plateNumber = vehicle?.vehicles?.plate_number
-
-                              if (plateNumber) {
-                                return (
-                                  <div className="inline-flex items-center justify-center px-2 py-0.5 bg-gradient-to-b from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border border-slate-800 dark:border-slate-600 rounded shadow-sm">
-                                    <span className="text-xs font-bold tracking-wider text-slate-900 dark:text-slate-100 font-mono">
-                                      {plateNumber}
-                                    </span>
-                                  </div>
-                                )
-                              }
-
-                              return (
-                                <Badge variant="outline" className="text-xs">
-                                  <Car className="w-3 h-3 mr-1" />
-                                  {getVehicleLabel(event.vin)}
-                                </Badge>
-                              )
-                            })()}
+                    <div className={`flex flex-col space-y-1.5 ${isExpanded ? 'p-4 pb-2' : 'p-3 pb-2'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2 flex-1 min-w-0">
+                          <div className={isExpanded ? 'mt-1' : 'mt-0.5'}>
+                            <CategoryIcon className={`${isExpanded ? 'w-5 h-5' : 'w-4 h-4'} text-muted-foreground`} />
                           </div>
-                          {event.event_description && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              {event.event_description}
-                            </p>
-                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className={`${isExpanded ? 'text-base' : 'text-sm'} font-semibold leading-none tracking-tight`}>
+                                {event.event_title}
+                              </h3>
+                              {(() => {
+                                const vehicle = vehicles.find(v => v.vin === event.vin)
+                                const plateNumber = vehicle?.vehicles?.plate_number
+
+                                if (plateNumber) {
+                                  return (
+                                    <div className="inline-flex items-center justify-center px-1.5 py-0.5 bg-gradient-to-b from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 border border-slate-800 dark:border-slate-600 rounded shadow-sm">
+                                      <span className="text-[10px] font-bold tracking-wider text-slate-900 dark:text-slate-100 font-mono">
+                                        {plateNumber}
+                                      </span>
+                                    </div>
+                                  )
+                                }
+
+                                return (
+                                  <Badge variant="outline" className="text-[10px] h-4 px-1">
+                                    <Car className="w-2.5 h-2.5 mr-0.5" />
+                                    {getVehicleLabel(event.vin)}
+                                  </Badge>
+                                )
+                              })()}
+                            </div>
+                            {isExpanded && event.event_description && (
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {event.event_description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge
+                              className={severityColors[event.severity]}
+                              variant="secondary"
+                            >
+                              <SeverityIcon className="w-3 h-3 mr-1" />
+                              <span className="text-[10px]">{event.severity}</span>
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                              {formatTimestamp(event.created_at)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleEventExpanded(event.id)
+                            }}
+                            className="p-1 hover:bg-muted/50 rounded transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                            )}
+                          </button>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <Badge
-                          className={severityColors[event.severity]}
-                          variant="secondary"
-                        >
-                          <SeverityIcon className="w-3 h-3 mr-1" />
-                          {event.severity}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {formatTimestamp(event.created_at)}
-                        </span>
-                      </div>
-                    </div>
                     </div>
 
-                    {event.metadata && Object.keys(event.metadata).length > 0 && (
-                      <div className="p-6 pt-0">
+                    {isExpanded && event.metadata && Object.keys(event.metadata).length > 0 && (
+                      <div className="px-4 pb-3">
                         <div className="bg-muted/50 rounded-md p-3 space-y-1">
                           <p className="text-xs font-medium text-muted-foreground mb-2">Metadata</p>
                           <div className="grid grid-cols-2 gap-x-4 gap-y-1">

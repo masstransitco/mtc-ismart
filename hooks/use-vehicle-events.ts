@@ -16,7 +16,33 @@ export interface VehicleEvent {
   created_by: string | null
 }
 
-export function useVehicleEvents(limit: number = 100) {
+// Helper function to calculate timestamp based on time range
+function getTimestampForRange(timeRange: string): string {
+  const now = new Date()
+  let minutesBack = 60 // default to 1 hour
+
+  switch(timeRange) {
+    case '30m':
+      minutesBack = 30
+      break
+    case '1h':
+      minutesBack = 60
+      break
+    case '12h':
+      minutesBack = 12 * 60
+      break
+    case '24h':
+      minutesBack = 24 * 60
+      break
+    default:
+      minutesBack = 60
+  }
+
+  const sinceTimestamp = new Date(now.getTime() - minutesBack * 60 * 1000)
+  return sinceTimestamp.toISOString()
+}
+
+export function useVehicleEvents(timeRange: string = '1h') {
   const [events, setEvents] = useState<VehicleEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,11 +53,12 @@ export function useVehicleEvents(limit: number = 100) {
     const fetchEvents = async () => {
       try {
         setLoading(true)
+        const sinceTimestamp = getTimestampForRange(timeRange)
         const { data, error: fetchError } = await supabase
           .from("vehicle_events")
           .select("*")
+          .gte("created_at", sinceTimestamp)
           .order("created_at", { ascending: false })
-          .limit(limit)
 
         if (fetchError) throw fetchError
 
@@ -59,7 +86,12 @@ export function useVehicleEvents(limit: number = 100) {
         },
         (payload) => {
           if (payload.eventType === "INSERT") {
-            setEvents((current) => [payload.new as VehicleEvent, ...current].slice(0, limit))
+            const newEvent = payload.new as VehicleEvent
+            const sinceTimestamp = getTimestampForRange(timeRange)
+            // Only add event if it's within the selected time range
+            if (new Date(newEvent.created_at) >= new Date(sinceTimestamp)) {
+              setEvents((current) => [newEvent, ...current])
+            }
           } else if (payload.eventType === "UPDATE") {
             setEvents((current) =>
               current.map((event) =>
@@ -80,17 +112,18 @@ export function useVehicleEvents(limit: number = 100) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [limit])
+  }, [timeRange])
 
   const refetch = async () => {
     const supabase = createBrowserClient()
     try {
       setLoading(true)
+      const sinceTimestamp = getTimestampForRange(timeRange)
       const { data, error: fetchError } = await supabase
         .from("vehicle_events")
         .select("*")
+        .gte("created_at", sinceTimestamp)
         .order("created_at", { ascending: false })
-        .limit(limit)
 
       if (fetchError) throw fetchError
 
