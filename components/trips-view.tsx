@@ -15,10 +15,11 @@ import {
 } from "@/components/ui/select"
 import { RefreshCw, TrendingUp } from "lucide-react"
 import { useTheme } from "next-themes"
+import TripsTimelineChart from "@/components/trips-timeline-chart"
 
 export default function TripsView() {
   const [selectedVin, setSelectedVin] = useState<string>("all")
-  const [selectedTimeRange, setSelectedTimeRange] = useState<string>("24h")
+  const [selectedTimeRange, setSelectedTimeRange] = useState<string>("12h")
   const [refreshing, setRefreshing] = useState(false)
   const filterRef = useRef<HTMLDivElement>(null)
 
@@ -52,12 +53,31 @@ export default function TripsView() {
 
   const getTimeRangeLabel = (range: string) => {
     switch (range) {
+      case "30m":
+        return "last 30 minutes"
+      case "1h":
+        return "last hour"
+      case "12h":
+        return "last 12 hours"
       case "24h":
-        return "Last 24 Hours"
-      case "7d":
-        return "Last 7 Days"
+        return "last 24 hours"
       default:
         return range
+    }
+  }
+
+  const getTimeRangeShortLabel = (range: string) => {
+    switch (range) {
+      case "30m":
+        return "30 min"
+      case "1h":
+        return "1 hour"
+      case "12h":
+        return "12 hours"
+      case "24h":
+        return "24 hours"
+      default:
+        return "Time range"
     }
   }
 
@@ -79,9 +99,24 @@ export default function TripsView() {
       {/* Filters */}
       <div ref={filterRef} className="sticky top-0 z-10 bg-background border-b touch-none">
         <div className="p-2 md:p-4 space-y-2">
-          {/* Trip count and time range */}
-          <div className="text-xs md:text-sm text-muted-foreground font-medium px-1">
-            {totalTrips} trip{totalTrips !== 1 ? "s" : ""} • {getTimeRangeLabel(selectedTimeRange)}
+          {/* Trip count and Time Range Filter */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-xs md:text-sm text-muted-foreground font-medium px-1">
+              {totalTrips} trip{totalTrips !== 1 ? "s" : ""} in {getTimeRangeLabel(selectedTimeRange)}
+            </div>
+            <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
+              <SelectTrigger className="h-8 text-xs w-24 md:w-28">
+                <SelectValue>
+                  {getTimeRangeShortLabel(selectedTimeRange)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="30m">Last 30 minutes</SelectItem>
+                <SelectItem value="1h">Last hour</SelectItem>
+                <SelectItem value="12h">Last 12 hours</SelectItem>
+                <SelectItem value="24h">Last 24 hours</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Filters row */}
@@ -100,16 +135,6 @@ export default function TripsView() {
               </SelectContent>
             </Select>
 
-            <Select value={selectedTimeRange} onValueChange={setSelectedTimeRange}>
-              <SelectTrigger className="h-8 text-xs flex-1 min-w-0">
-                <SelectValue placeholder="Time range" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="24h">24h</SelectItem>
-                <SelectItem value="7d">7d</SelectItem>
-              </SelectContent>
-            </Select>
-
             <Button
               variant="outline"
               size="sm"
@@ -122,6 +147,15 @@ export default function TripsView() {
           </div>
         </div>
       </div>
+
+      {/* Timeline Chart */}
+      {vehicleStats.length > 0 && (
+        <TripsTimelineChart
+          vehicleStats={vehicleStats}
+          timeRange={selectedTimeRange}
+          vehicles={vehicles}
+        />
+      )}
 
       {/* Error State */}
       {error && (
